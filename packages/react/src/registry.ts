@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import type { BlockDefinition } from "@editkraft/schema";
+import type { BlockDefinition, BlockSchemaDescriptor } from "@editkraft/schema";
 import { EditkraftError } from "./errors";
 
 /** Props, die jede Block-Komponente erhält: die validierten Block-Props + children. */
@@ -19,6 +19,7 @@ export interface Registry {
   get(type: string): RegistryEntry | undefined;
   has(type: string): boolean;
   types(): string[];
+  descriptors(): BlockSchemaDescriptor[];
 }
 
 /**
@@ -62,5 +63,12 @@ export function createRegistry(entries: RegistryEntry[]): Registry {
     get: (type) => map.get(type),
     has: (type) => map.has(type),
     types: () => [...map.keys()],
+    descriptors: () =>
+      [...map.values()].map((e) => ({
+        type: e.definition.type,
+        label: e.definition.label,
+        slots: e.definition.slots,
+        fields: e.definition.fields,
+      })),
   };
 }

@@ -43,4 +43,14 @@ describe("createRegistry", () => {
       createRegistry([{ component: Comp }]),
     ).toThrowError(/Definition/);
   });
+
+  it("descriptors() liefert serialisierbare Block-Deskriptoren", () => {
+    const reg = createRegistry([{ definition: heroDef, component: Comp }]);
+    const d = reg.descriptors();
+    expect(d).toEqual([
+      { type: "Hero", label: "Hero", slots: [], fields: heroDef.fields },
+    ]);
+    // vollständig serialisierbar (keine Funktionen)
+    expect(() => JSON.stringify(d)).not.toThrow();
+  });
 });
