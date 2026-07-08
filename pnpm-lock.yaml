@@ -84,10 +84,11 @@ importers:
         version: 3.2.7(@types/node@20.19.43)(jsdom@25.0.1)
 
   packages/react:
-    devDependencies:
+    dependencies:
       '@editkraft/schema':
         specifier: workspace:*
         version: link:../schema
+    devDependencies:
       '@supabase/supabase-js':
         specifier: ^2.50.0
         version: 2.110.0
