@@ -8,3 +8,4 @@ coverage/
 out/
 # lokale link:-Overrides dürfen nie eingecheckt werden
 *.local
+*.tsbuildinfo

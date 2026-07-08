@@ -1,5 +1,13 @@
 # editkraft
 
+## 0.1.1
+
+### Patch Changes
+
+- `editkraft init` generiert die Preview-Route jetzt für den neuen Draft-Flow:
+  serverseitiges Laden des Draft-Contents (`loadDraftContent`) und Übergabe an die
+  Client-Komponente `EditkraftPreview` aus `@editkraft/react/preview`.
+
 ## 0.1.0
 
 ### Minor Changes

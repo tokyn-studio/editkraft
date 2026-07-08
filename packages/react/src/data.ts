@@ -92,3 +92,45 @@ export async function loadPublishedPage(
 export function pageTag(slug: string): string {
   return `editkraft:page:${slug}`;
 }
+
+/**
+ * Lädt den DRAFT-Content einer Seite (neueste Version, unabhängig vom Publish).
+ * Nur für den Draft Mode – der übergebene Client MUSS ein Server-Client mit
+ * service_role sein (Draft-Reads sind über RLS gesperrt). Niemals im Browser
+ * mit Service-Key verwenden.
+ */
+export async function loadDraftContent(
+  supabase: SupabaseClient,
+  slug: string,
+): Promise<PublishedPage | null> {
+  const { data: page } = await supabase
+    .from("ek_pages")
+    .select("id, slug, title, meta")
+    .eq("slug", slug)
+    .maybeSingle();
+  if (!page) return null;
+
+  const { data: version } = await supabase
+    .from("ek_page_versions")
+    .select("content")
+    .eq("page_id", page.id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!version) return null;
+
+  const parsed = pageContentSchema.safeParse(version.content);
+  if (!parsed.success) {
+    throw new EditkraftError(
+      "CONTENT_INVALID",
+      `Draft-Blocktree der Seite "${slug}" ist ungültig.`,
+    );
+  }
+
+  return {
+    slug: page.slug as string,
+    title: page.title as string,
+    meta: (page.meta ?? {}) as PageMeta,
+    content: parsed.data,
+  };
+}

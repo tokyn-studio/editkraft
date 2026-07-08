@@ -99,8 +99,25 @@ Integrationstest in `apps/example` (Seed via service_role, Lesen via Anon-Client
 über RLS, `renderBlocks` → HTML). Der Next-`build` der Example-App ist der
 CI-Smoke. Ein vollständiger Playwright-Browsertest ist als TODO notiert.
 
+## ADR-016: Preview-Bridge als separates "use client"-Bundle
+`EditkraftPreview` ist eine Client-Komponente und wird über den Subpath
+`@editkraft/react/preview` exportiert (eigener tsup-Entry). Die `"use client"`-
+Direktive wird per Post-Build-Schritt an das Bundle geprependet, weil Treeshake
+das alleinstehende Direktiv-Statement sonst entfernt. So bleiben die Server-
+Exports in `.` serverfähig. Draft-Content lädt die Server-Preview-Route
+(`loadDraftContent`, service_role) und übergibt ihn der Client-Komponente – der
+Service-Key erreicht nie den Browser.
+
+## ADR-017: postMessage-Bridge mit Pflicht-Origin-Check und Ziel-Origin
+`EditkraftPreview` sendet an `window.parent` immer mit der konkreten
+`studioOrigin` (nie `*`) und ignoriert eingehende Nachrichten fremder Origin
+(`isAllowedOrigin`). Der Blocktree wird lokal (`updateBlockProps`, immutable)
+aktualisiert; die Selektion läuft über Klick-Overlays je Block. Die Message-Typen
+kommen aus dem Contract (`@editkraft/schema`).
+
 ## Offene TODOs (Nicht-Ziele dieses Repos, bewusst verschoben)
 - Playwright-Browser-Smoke der Example-App (aktuell: Integrationstest + Next-Build).
+- Overlays für tief verschachtelte Slots (aktuell: Klick-Overlay je Block, rekursiv).
 - i18n-Content, Scheduling, Freigabe-Workflows – Feature-Ebene, nicht Contract.
 - Content-Migrationen zwischen Major-Versionen: nur Gerüst (`migrateContent`,
   `registerMigration`), konkrete Migrationen entstehen mit der ersten Major-Änderung.

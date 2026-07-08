@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <title>Editkraft – Fake Studio (Test-Harness)</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 0; display: grid; grid-template-columns: 320px 1fr; height: 100vh; }
+      aside { padding: 16px; border-right: 1px solid #ddd; overflow: auto; }
+      iframe { border: 0; width: 100%; height: 100%; }
+      label { display: block; font-size: 13px; margin-top: 12px; }
+      input, button { font: inherit; padding: 6px 8px; margin-top: 4px; }
+      pre { background: #f6f6f6; padding: 8px; font-size: 12px; overflow: auto; max-height: 40vh; }
+      h1 { font-size: 15px; }
+    </style>
+  </head>
+  <body>
+    <aside>
+      <h1>Fake Studio</h1>
+      <p style="font-size: 13px; color: #555">
+        Minimaler Test-Harness für die Preview-Bridge. Setzt <code>previewUrl</code>
+        und <code>studioOrigin</code> passend, dann Block selektieren und Prop live ändern.
+      </p>
+
+      <label>Preview-URL (Draft Mode)
+        <input id="previewUrl" size="40" value="http://localhost:3000/editkraft/preview/start" />
+      </label>
+      <button id="load">Preview laden</button>
+
+      <label>Block-ID
+        <input id="blockId" value="b1" />
+      </label>
+      <button id="select">ek:select senden</button>
+
+      <label>Prop-Name
+        <input id="propKey" value="headline" />
+      </label>
+      <label>Prop-Wert
+        <input id="propValue" value="Live aus dem Studio" />
+      </label>
+      <button id="update">ek:update senden</button>
+
+      <h1 style="margin-top: 20px">Empfangen</h1>
+      <pre id="log"></pre>
+    </aside>
+
+    <iframe id="preview"></iframe>
+
+    <script>
+      const CHANNEL = "editkraft";
+      const V = 1;
+      const iframe = document.getElementById("preview");
+      const log = document.getElementById("log");
+      const previewOrigin = () => new URL(document.getElementById("previewUrl").value).origin;
+
+      function send(message) {
+        iframe.contentWindow?.postMessage({ channel: CHANNEL, v: V, ...message }, previewOrigin());
+      }
+
+      document.getElementById("load").onclick = () => {
+        iframe.src = document.getElementById("previewUrl").value;
+      };
+      document.getElementById("select").onclick = () =>
+        send({ type: "ek:select", blockId: document.getElementById("blockId").value });
+      document.getElementById("update").onclick = () =>
+        send({
+          type: "ek:update",
+          blockId: document.getElementById("blockId").value,
+          props: { [document.getElementById("propKey").value]: document.getElementById("propValue").value },
+        });
+
+      // Nachrichten der Preview (ek:ready / ek:tree / ek:select) mitschreiben.
+      window.addEventListener("message", (e) => {
+        if (e.origin !== previewOrigin()) return;
+        const m = e.data;
+        if (!m || m.channel !== CHANNEL) return;
+        log.textContent = `${new Date().toLocaleTimeString()}  ${JSON.stringify(m)}\n` + log.textContent;
+      });
+    </script>
+  </body>
+</html>

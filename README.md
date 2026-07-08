@@ -10,7 +10,7 @@ Editkraft-Infrastruktur. Content gehört dem Kunden.
 | Paket | npm | Zweck |
 | --- | --- | --- |
 | `packages/schema` | `@editkraft/schema` | Blocktree-Format, Feld-Primitives, Zod-Schemas – der Contract |
-| `packages/react` | `@editkraft/react` | Renderer (`EditkraftPage`, `createRegistry`, `renderBlocks`), Revalidate-Handler |
+| `packages/react` | `@editkraft/react` | Renderer (`EditkraftPage`, `createRegistry`, `renderBlocks`), Revalidate-Handler, Preview-Bridge (`@editkraft/react/preview`) |
 | `packages/cli` | `editkraft` | `npx editkraft init` / `doctor` |
 
 ## Kundenprojekt einrichten

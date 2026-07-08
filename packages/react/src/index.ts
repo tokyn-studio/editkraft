@@ -5,11 +5,16 @@ export { renderBlocks, type RenderOptions } from "./render";
 export { EditkraftPage, type EditkraftPageProps } from "./page";
 export {
   loadPublishedPage,
+  loadDraftContent,
   defaultSupportedRange,
   pageTag,
   type PublishedPage,
   type LoadOptions,
 } from "./data";
+export { updateBlockProps, findBlock } from "./tree";
+// EditkraftPreview ist eine Client-Komponente und wird über den Subpath
+// "@editkraft/react/preview" importiert (eigenes "use client"-Bundle).
+export type { EditkraftPreviewProps } from "./preview";
 export { createRevalidateHandler, type RevalidateHandlerOptions } from "./revalidate";
 export {
   EditkraftError,

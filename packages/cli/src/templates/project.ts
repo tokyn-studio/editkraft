@@ -90,23 +90,41 @@ export const POST = createRevalidateHandler({
 }
 
 export function previewRoute(): string {
-  return `import { EditkraftPreview } from "@editkraft/react";
+  return `import { draftMode } from "next/headers";
+import { notFound } from "next/navigation";
+import { createClient } from "@supabase/supabase-js";
+import { loadDraftContent } from "@editkraft/react";
+import { EditkraftPreview } from "@editkraft/react/preview";
 import { registry } from "@/blocks/registry";
 
 /**
- * Preview-Route für das Studio. Aktiv nur im Next.js Draft Mode; lädt Draft-
- * Content und spricht das postMessage-Protokoll mit dem Studio-iframe.
+ * Preview-Route für das Studio. Aktiv nur im Next.js Draft Mode: lädt den
+ * Draft-Content serverseitig (Service-Key, nur Server!) und übergibt ihn an die
+ * Client-Komponente EditkraftPreview, die das postMessage-Protokoll mit dem
+ * Studio-iframe spricht.
  */
 export default async function EditkraftPreviewPage({
   params,
 }: {
   params: Promise<{ slug?: string[] }>;
 }) {
+  const { isEnabled } = await draftMode();
+  if (!isEnabled) notFound();
+
   const { slug } = await params;
+  const supabase = createClient(
+    process.env.SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { persistSession: false } },
+  );
+
+  const page = await loadDraftContent(supabase, slug?.join("/") ?? "");
+  if (!page) notFound();
+
   return (
     <EditkraftPreview
+      content={page.content}
       registry={registry}
-      slug={slug?.join("/") ?? ""}
       studioOrigin={process.env.NEXT_PUBLIC_EDITKRAFT_STUDIO_ORIGIN ?? ""}
     />
   );
