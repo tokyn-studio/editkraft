@@ -60,6 +60,8 @@ export {
   type EkAssetRow,
 } from "./rows";
 
+export { createDraftToken, verifyDraftToken } from "./draft-token";
+
 export {
   PROTOCOL_VERSION,
   PROTOCOL_CHANNEL,
