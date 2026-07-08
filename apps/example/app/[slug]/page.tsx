@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { EditkraftPage } from "@editkraft/react";
+import { loadPublishedPage, renderBlocks } from "@editkraft/react";
 import { createPublicClient } from "@/lib/supabase";
 import { registry } from "@/blocks/registry";
 
@@ -12,12 +12,7 @@ export default async function Page({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  return (
-    <EditkraftPage
-      supabase={createPublicClient()}
-      slug={slug}
-      registry={registry}
-      notFound={notFound()}
-    />
-  );
+  const page = await loadPublishedPage(createPublicClient(), slug);
+  if (!page) notFound();
+  return renderBlocks(page.content.blocks, registry);
 }

@@ -5,6 +5,7 @@ import {
   heroComponent,
   revalidateRoute,
   previewRoute,
+  previewClient,
   envExample,
 } from "./templates/project";
 
@@ -42,6 +43,10 @@ export function generateFiles(options: GenerateOptions): FileSpec[] {
     {
       path: `${base}app/editkraft/preview/[[...slug]]/page.tsx`,
       content: previewRoute(),
+    },
+    {
+      path: `${base}app/editkraft/preview/preview-client.tsx`,
+      content: previewClient(),
     },
     { path: ".env.editkraft.example", content: envExample() },
   ];

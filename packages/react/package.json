@@ -1,6 +1,6 @@
 {
   "name": "@editkraft/react",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Editkraft-Renderer: Block-Registry, EditkraftPage und Revalidate-Handler für Next.js",
   "license": "MIT",
   "type": "module",

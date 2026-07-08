@@ -13,6 +13,7 @@ describe("generateFiles", () => {
       "blocks/Hero.tsx",
       "app/api/editkraft/revalidate/route.ts",
       "app/editkraft/preview/[[...slug]]/page.tsx",
+      "app/editkraft/preview/preview-client.tsx",
       ".env.editkraft.example",
     ]);
   });

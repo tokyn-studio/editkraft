@@ -1,4 +1,3 @@
-import { revalidateTag } from "next/cache";
 import { pageTag } from "./data";
 
 export interface RevalidateHandlerOptions {
@@ -64,6 +63,9 @@ export function createRevalidateHandler(options: RevalidateHandlerOptions) {
 
     const payload = await request.json().catch(() => null);
     const slugs = (options.resolveSlugs ?? defaultResolveSlugs)(payload);
+    // Lazy import: next/cache wird nur zur Laufzeit gezogen, damit der statische
+    // Modulgraph (z. B. beim Import in Client-nahen Bäumen) sauber bleibt.
+    const { revalidateTag } = await import("next/cache");
     for (const slug of slugs) {
       revalidateTag(pageTag(slug));
     }

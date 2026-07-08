@@ -94,14 +94,13 @@ export function previewRoute(): string {
 import { notFound } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 import { loadDraftContent } from "@editkraft/react";
-import { EditkraftPreview } from "@editkraft/react/preview";
-import { registry } from "@/blocks/registry";
+import { PreviewClient } from "../preview-client";
 
 /**
- * Preview-Route für das Studio. Aktiv nur im Next.js Draft Mode: lädt den
- * Draft-Content serverseitig (Service-Key, nur Server!) und übergibt ihn an die
- * Client-Komponente EditkraftPreview, die das postMessage-Protokoll mit dem
- * Studio-iframe spricht.
+ * Preview-Route für das Studio (Server Component). Aktiv nur im Next.js Draft
+ * Mode: lädt den Draft-Content serverseitig (Service-Key, nur Server!) und
+ * übergibt NUR den serialisierbaren Content an den Client-Wrapper. Die Registry
+ * (mit Komponenten-Funktionen) darf nicht über die Server→Client-Grenze.
  */
 export default async function EditkraftPreviewPage({
   params,
@@ -122,12 +121,35 @@ export default async function EditkraftPreviewPage({
   if (!page) notFound();
 
   return (
-    <EditkraftPreview
+    <PreviewClient
       content={page.content}
-      registry={registry}
       studioOrigin={process.env.NEXT_PUBLIC_EDITKRAFT_STUDIO_ORIGIN ?? ""}
     />
   );
+}
+`;
+}
+
+export function previewClient(): string {
+  return `"use client";
+
+import type { PageContent } from "@editkraft/schema";
+import { EditkraftPreview } from "@editkraft/react/preview";
+import { registry } from "@/blocks/registry";
+
+/**
+ * Client-Wrapper: importiert die Registry (mit Komponenten) client-seitig, damit
+ * keine Funktionen über die Server→Client-Grenze gereicht werden. Der Server
+ * übergibt nur den serialisierbaren Draft-Content.
+ */
+export function PreviewClient({
+  content,
+  studioOrigin,
+}: {
+  content: PageContent;
+  studioOrigin: string;
+}) {
+  return <EditkraftPreview content={content} registry={registry} studioOrigin={studioOrigin} />;
 }
 `;
 }
