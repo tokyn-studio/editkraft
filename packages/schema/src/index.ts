@@ -67,6 +67,7 @@ export {
   ekSelectMessage,
   ekUpdateMessage,
   ekTreeMessage,
+  ekSchemaMessage,
   ekMessage,
   parseMessage,
   createMessage,
@@ -75,5 +76,7 @@ export {
   type EkSelectMessage,
   type EkUpdateMessage,
   type EkTreeMessage,
+  type EkSchemaMessage,
   type EkMessage,
+  type BlockSchemaDescriptor,
 } from "./protocol";
