@@ -7,7 +7,7 @@ import { pageContentSchema, type BlockFieldDescriptor } from "./block";
  * Studio-Seite implementiert das Nachbar-Repo.
  *
  * Richtung:
- *   preview → studio: ek:ready, ek:tree, ek:select (User klickt im Preview)
+ *   preview → studio: ek:ready, ek:schema, ek:tree, ek:select (User klickt im Preview)
  *   studio → preview: ek:select (Selektion setzen), ek:update (Prop-Update)
  *
  * Jede Nachricht trägt `channel: "editkraft"` und `v` (Protokollversion), damit

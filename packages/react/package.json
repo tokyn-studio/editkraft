@@ -32,7 +32,7 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
-    "@editkraft/schema": "workspace:*"
+    "@editkraft/schema": "workspace:^"
   },
   "peerDependencies": {
     "@supabase/supabase-js": "^2.50.0",

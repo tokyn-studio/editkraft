@@ -46,6 +46,7 @@ describe("runDoctorChecks", () => {
         "SUPABASE_SERVICE_ROLE_KEY=secret",
         "EDITKRAFT_REVALIDATE_SECRET=abc",
         "NEXT_PUBLIC_EDITKRAFT_STUDIO_ORIGIN=https://studio.editkraft.dev",
+        "EDITKRAFT_PREVIEW_SECRET=def",
       ].join("\n"),
     );
     expect(status(runDoctorChecks(dir), "ENV")).toBe("ok");

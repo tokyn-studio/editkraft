@@ -86,7 +86,7 @@ importers:
   packages/react:
     dependencies:
       '@editkraft/schema':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../schema
     devDependencies:
       '@supabase/supabase-js':
