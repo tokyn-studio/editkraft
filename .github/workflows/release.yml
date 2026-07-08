@@ -36,8 +36,8 @@ jobs:
           title: "chore: version packages"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # NPM_TOKEN wird gesetzt, sobald die npm-Org @editkraft steht.
-          # Bis dahin läuft der publish-Schritt ins Leere (kein Token → kein Push),
-          # der Version-PR-Mechanismus funktioniert trotzdem.
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          # setup-node erzeugt eine .npmrc mit _authToken=${NODE_AUTH_TOKEN};
+          # ohne diese Zeile publiziert npm unauthentifiziert → 404.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: "true"
