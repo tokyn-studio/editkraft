@@ -92,7 +92,7 @@ export async function init(options: InitOptions): Promise<number> {
       `2. ENV setzen (siehe ${pc.cyan(".env.editkraft.example")}):`,
       "   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, EDITKRAFT_REVALIDATE_SECRET,",
       "   NEXT_PUBLIC_EDITKRAFT_STUDIO_ORIGIN",
-      `3. ${pc.cyan("@editkraft/react")} installieren und Blöcke in blocks/registry.ts ergänzen`,
+      `3. ${pc.cyan("@editkraft/react @editkraft/schema zod")} installieren und Blöcke in blocks/registry.ts ergänzen`,
       `4. Prüfen mit  ${pc.cyan("npx editkraft doctor")}`,
     ].join("\n"),
     "Nächste Schritte",

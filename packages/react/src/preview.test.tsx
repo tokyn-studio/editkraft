@@ -47,6 +47,15 @@ describe("EditkraftPreview (postMessage-Bridge)", () => {
     post.mockRestore();
   });
 
+  it("sendet ek:schema mit den Block-Deskriptoren beim Mount", () => {
+    const post = vi.spyOn(window.parent, "postMessage");
+    render(<EditkraftPreview content={content} registry={registry} studioOrigin={STUDIO} />);
+    const schema = post.mock.calls.map((c) => c[0] as { type: string; blocks?: unknown[] }).find((m) => m.type === "ek:schema");
+    expect(schema).toBeTruthy();
+    expect(schema!.blocks!.length).toBeGreaterThan(0);
+    post.mockRestore();
+  });
+
   it("ek:update aus dem Studio aktualisiert das Prop live im DOM", async () => {
     render(<EditkraftPreview content={content} registry={registry} studioOrigin={STUDIO} />);
     expect(screen.getByText("Original")).toBeTruthy();

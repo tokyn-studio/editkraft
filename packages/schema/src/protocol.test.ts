@@ -6,6 +6,7 @@ import {
   createMessage,
   isAllowedOrigin,
   ekMessage,
+  type BlockSchemaDescriptor,
 } from "./protocol";
 
 describe("postMessage-Protokoll", () => {
@@ -60,5 +61,22 @@ describe("postMessage-Protokoll", () => {
     expect(
       isAllowedOrigin("https://a.dev", ["https://a.dev", "http://localhost:3000"]),
     ).toBe(true);
+  });
+});
+
+describe("ek:schema", () => {
+  const blocks: BlockSchemaDescriptor[] = [
+    { type: "Hero", label: "Hero", slots: [], fields: [{ kind: "text", key: "headline", optional: false }] },
+  ];
+
+  it("ist ein gültiger Message-Typ", () => {
+    const msg = createMessage("ek:schema", { blocks });
+    expect(ekMessage.safeParse(msg).success).toBe(true);
+    expect(parseMessage(msg)?.type).toBe("ek:schema");
+  });
+
+  it("verlangt type/label/slots/fields je Block", () => {
+    const bad = createMessage("ek:schema", { blocks: [{ type: "X" }] as never });
+    expect(ekMessage.safeParse(bad).success).toBe(false);
   });
 });

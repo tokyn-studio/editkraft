@@ -43,4 +43,15 @@ describe("generateFiles", () => {
     // Kein Schreibrecht für anon/authenticated
     expect(migration).not.toMatch(/grant (insert|update|delete).*anon/i);
   });
+
+  it("Preview-Route nutzt Draft-Token statt Draft-Mode-Cookie", () => {
+    const files = Object.fromEntries(
+      generateFiles({ srcDir: false, timestamp: FIXED }).map((f) => [f.path, f.content]),
+    );
+    const preview = files["app/editkraft/preview/[[...slug]]/page.tsx"]!;
+    expect(preview).toContain("verifyDraftToken");
+    expect(preview).not.toContain("draftMode");
+    const env = files[".env.editkraft.example"]!;
+    expect(env).toContain("EDITKRAFT_PREVIEW_SECRET");
+  });
 });

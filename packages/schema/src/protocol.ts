@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { pageContentSchema } from "./block";
+import { pageContentSchema, type BlockFieldDescriptor } from "./block";
 
 /**
  * postMessage-Protokoll zwischen Preview (Kundenprojekt, `@editkraft/react`) und
@@ -7,7 +7,7 @@ import { pageContentSchema } from "./block";
  * Studio-Seite implementiert das Nachbar-Repo.
  *
  * Richtung:
- *   preview → studio: ek:ready, ek:tree, ek:select (User klickt im Preview)
+ *   preview → studio: ek:ready, ek:schema, ek:tree, ek:select (User klickt im Preview)
  *   studio → preview: ek:select (Selektion setzen), ek:update (Prop-Update)
  *
  * Jede Nachricht trägt `channel: "editkraft"` und `v` (Protokollversion), damit
@@ -49,11 +49,42 @@ export const ekTreeMessage = z.object({
   content: pageContentSchema,
 });
 
+export type BlockSchemaDescriptor = {
+  type: string;
+  label: string;
+  slots: string[];
+  fields: BlockFieldDescriptor[];
+};
+
+const blockFieldDescriptorSchema = z
+  .object({
+    kind: z.enum(["text", "richText", "image", "link", "color", "list", "reference"]),
+    key: z.string(),
+    optional: z.boolean(),
+  })
+  .passthrough(); // label, to, item etc. werden mitgeführt
+
+const blockSchemaDescriptorSchema = z.object({
+  type: z.string(),
+  label: z.string(),
+  slots: z.array(z.string()),
+  fields: z.array(blockFieldDescriptorSchema),
+});
+
+/** Preview → Studio: verfügbare Blöcke samt Feld-Deskriptoren (für die Formulare). */
+export const ekSchemaMessage = z.object({
+  ...base,
+  type: z.literal("ek:schema"),
+  blocks: z.array(blockSchemaDescriptorSchema),
+});
+export type EkSchemaMessage = z.infer<typeof ekSchemaMessage>;
+
 export const ekMessage = z.discriminatedUnion("type", [
   ekReadyMessage,
   ekSelectMessage,
   ekUpdateMessage,
   ekTreeMessage,
+  ekSchemaMessage,
 ]);
 
 export type EkReadyMessage = z.infer<typeof ekReadyMessage>;

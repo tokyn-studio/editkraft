@@ -90,25 +90,28 @@ export const POST = createRevalidateHandler({
 }
 
 export function previewRoute(): string {
-  return `import { draftMode } from "next/headers";
-import { notFound } from "next/navigation";
+  return `import { notFound } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 import { loadDraftContent } from "@editkraft/react";
+import { verifyDraftToken } from "@editkraft/schema";
 import { PreviewClient } from "../preview-client";
 
 /**
- * Preview-Route für das Studio (Server Component). Aktiv nur im Next.js Draft
- * Mode: lädt den Draft-Content serverseitig (Service-Key, nur Server!) und
- * übergibt NUR den serialisierbaren Content an den Client-Wrapper. Die Registry
- * (mit Komponenten-Funktionen) darf nicht über die Server→Client-Grenze.
+ * Preview-Route für das Studio. Zugriff über ein signiertes, kurzlebiges
+ * Draft-Token (?token=…) statt Draft-Mode-Cookie – funktioniert damit auch im
+ * Cross-Origin-iframe. Lädt Draft-Content serverseitig (Service-Key) und
+ * übergibt nur den serialisierbaren Content an den Client-Wrapper.
  */
 export default async function EditkraftPreviewPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug?: string[] }>;
+  searchParams: Promise<{ token?: string }>;
 }) {
-  const { isEnabled } = await draftMode();
-  if (!isEnabled) notFound();
+  const { token } = await searchParams;
+  const secret = process.env.EDITKRAFT_PREVIEW_SECRET;
+  if (!secret || !token || !(await verifyDraftToken(token, secret))) notFound();
 
   const { slug } = await params;
   const supabase = createClient(
@@ -164,6 +167,8 @@ NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 # Shared Secret für den Revalidate-Webhook
 EDITKRAFT_REVALIDATE_SECRET=
+# Shared Secret für signierte Draft-Preview-Tokens (Studio ⇄ Kundenseite)
+EDITKRAFT_PREVIEW_SECRET=
 # Erlaubte Studio-Origin für die Preview-Bridge
 NEXT_PUBLIC_EDITKRAFT_STUDIO_ORIGIN=https://studio.editkraft.dev
 `;

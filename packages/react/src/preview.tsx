@@ -98,6 +98,7 @@ export function EditkraftPreview({
 
   useEffect(() => {
     postToStudio(createMessage("ek:ready", { schemaVersion: content.schemaVersion }), studioOrigin);
+    postToStudio(createMessage("ek:schema", { blocks: registry.descriptors() }), studioOrigin);
     postToStudio(createMessage("ek:tree", { content }), studioOrigin);
 
     const onMessage = (event: MessageEvent) => {

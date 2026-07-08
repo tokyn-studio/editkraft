@@ -1,5 +1,15 @@
 # editkraft
 
+## 0.1.3
+
+### Patch Changes
+
+- Editor-Fundament: neue postMessage-Nachricht `ek:schema` (Preview liefert die
+  Block-Feld-Deskriptoren ans Studio), `Registry.descriptors()`, `EditkraftPreview`
+  sendet das Schema beim Mount. Neues signiertes Draft-Token (`createDraftToken`/
+  `verifyDraftToken`, HMAC via Web Crypto) für cookie-freie Preview; `editkraft init`
+  generiert die Preview-Route jetzt token-gegated (ENV `EDITKRAFT_PREVIEW_SECRET`).
+
 ## 0.1.2
 
 ### Patch Changes

@@ -17,6 +17,7 @@ const REQUIRED_ENV = [
   "SUPABASE_SERVICE_ROLE_KEY",
   "EDITKRAFT_REVALIDATE_SECRET",
   "NEXT_PUBLIC_EDITKRAFT_STUDIO_ORIGIN",
+  "EDITKRAFT_PREVIEW_SECRET",
 ];
 
 /** Liest gesetzte ENV-Keys aus process.env und .env*-Dateien im Projekt. */
