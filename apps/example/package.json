@@ -1,0 +1,28 @@
+{
+  "name": "@editkraft/example",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "next build",
+    "dev": "next dev",
+    "typecheck": "tsc --noEmit",
+    "test:integration": "vitest run"
+  },
+  "dependencies": {
+    "@editkraft/react": "workspace:*",
+    "@editkraft/schema": "workspace:*",
+    "@supabase/supabase-js": "^2.50.0",
+    "next": "^15.1.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
+  }
+}

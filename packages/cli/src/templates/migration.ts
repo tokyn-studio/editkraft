@@ -110,6 +110,12 @@ grant select on public.ek_pages to anon, authenticated;
 grant select on public.ek_page_versions to anon, authenticated;
 grant select on public.ek_assets to anon, authenticated;
 
+-- service_role: voller Zugriff (Studio & Draft Mode schreiben serverseitig).
+-- service_role umgeht RLS zusätzlich (BYPASSRLS).
+grant all on public.ek_pages to service_role;
+grant all on public.ek_page_versions to service_role;
+grant all on public.ek_assets to service_role;
+
 drop policy if exists "ek public reads published pages" on public.ek_pages;
 create policy "ek public reads published pages"
   on public.ek_pages for select

@@ -73,7 +73,34 @@ referenzieren es), deklariert die Kompatibilität aber als Peer-Range, damit die
 SemVer-Disziplin über alle Pakete sichtbar ist. RLS-Tests liegen als
 SQL-Fixture (`packages/cli/test/rls.fixture.sql`, via `set local role`).
 
+## ADR-012: Renderer entkoppelt über Registry und übergebenen Supabase-Client
+`@editkraft/react` bündelt weder React/Next noch Supabase (alles Peer-Deps).
+`EditkraftPage`/`loadPublishedPage` bekommen den Supabase-Client des Kundenprojekts
+übergeben und lesen ausschließlich published Content – der Lese-Pfad hat keine
+Editkraft-Abhängigkeit. Unbekannte Block-Typen: Production überspringt +
+`console.warn`, Dev zeigt einen sichtbaren Platzhalter (kein stiller Crash).
+
+## ADR-013: schemaVersion-Kompatibilität = gleiche Major
+`loadPublishedPage` prüft die geschriebene `schemaVersion` gegen eine Range
+(Default: gleiche Major wie das installierte `@editkraft/schema`). Inkompatibel →
+`EditkraftSchemaError` mit klarer Handlungsanweisung (Versionen angleichen oder im
+Studio migrieren). Das spiegelt die Breaking-Change-Regel (ADR-006) im Renderer.
+
+## ADR-014: ISR-Revalidation tag-basiert über Shared Secret
+`createRevalidateHandler` prüft ein Shared Secret (Header oder Query,
+längensicherer Vergleich) und ruft `revalidateTag(pageTag(slug))`. Slugs kommen
+per Default aus dem Supabase-DB-Webhook (`record`/`old_record`). So invalidiert ein
+Publish genau die betroffene(n) Seite(n). Kein Secret konfiguriert → 500 (kein
+offener Endpoint).
+
+## ADR-015: Integrationsnachweis statt vollem Playwright (vorerst)
+Der DoD-Nachweis „Seite mit zwei Blöcken aus lokaler Supabase" läuft als
+Integrationstest in `apps/example` (Seed via service_role, Lesen via Anon-Client
+über RLS, `renderBlocks` → HTML). Der Next-`build` der Example-App ist der
+CI-Smoke. Ein vollständiger Playwright-Browsertest ist als TODO notiert.
+
 ## Offene TODOs (Nicht-Ziele dieses Repos, bewusst verschoben)
+- Playwright-Browser-Smoke der Example-App (aktuell: Integrationstest + Next-Build).
 - i18n-Content, Scheduling, Freigabe-Workflows – Feature-Ebene, nicht Contract.
 - Content-Migrationen zwischen Major-Versionen: nur Gerüst (`migrateContent`,
   `registerMigration`), konkrete Migrationen entstehen mit der ersten Major-Änderung.
