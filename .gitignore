@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.turbo/
+coverage/
+*.log
+.DS_Store
+.next/
+out/
+# lokale link:-Overrides dürfen nie eingecheckt werden
+*.local
