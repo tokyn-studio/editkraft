@@ -1,0 +1,234 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`generateFiles > Snapshot des generierten Inhalts ist stabil 1`] = `
+{
+  ".env.editkraft.example": "# Editkraft
+# Supabase deines Projekts (Server-only Service-Key niemals mit NEXT_PUBLIC_ prefixen!)
+SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+# Shared Secret für den Revalidate-Webhook
+EDITKRAFT_REVALIDATE_SECRET=
+# Erlaubte Studio-Origin für die Preview-Bridge
+NEXT_PUBLIC_EDITKRAFT_STUDIO_ORIGIN=https://studio.editkraft.dev
+",
+  "app/api/editkraft/revalidate/route.ts": "import { createRevalidateHandler } from "@editkraft/react";
+
+/**
+ * Revalidate-Endpoint. Wird per Supabase-Webhook beim Publish aufgerufen und
+ * mit einem Shared Secret abgesichert (EDITKRAFT_REVALIDATE_SECRET).
+ */
+export const POST = createRevalidateHandler({
+  secret: process.env.EDITKRAFT_REVALIDATE_SECRET,
+});
+",
+  "app/editkraft/preview/[[...slug]]/page.tsx": "import { EditkraftPreview } from "@editkraft/react";
+import { registry } from "@/blocks/registry";
+
+/**
+ * Preview-Route für das Studio. Aktiv nur im Next.js Draft Mode; lädt Draft-
+ * Content und spricht das postMessage-Protokoll mit dem Studio-iframe.
+ */
+export default async function EditkraftPreviewPage({
+  params,
+}: {
+  params: Promise<{ slug?: string[] }>;
+}) {
+  const { slug } = await params;
+  return (
+    <EditkraftPreview
+      registry={registry}
+      slug={slug?.join("/") ?? ""}
+      studioOrigin={process.env.NEXT_PUBLIC_EDITKRAFT_STUDIO_ORIGIN ?? ""}
+    />
+  );
+}
+",
+  "blocks/Hero.tsx": "import type { EkImageValue, EkLinkValue } from "@editkraft/schema";
+
+/**
+ * Beispiel-Block. Passe Markup und Styling an dein Design an – die Props kommen
+ * validiert aus der Block-Definition in blocks/registry.ts.
+ */
+export function Hero({
+  headline,
+  image,
+  cta,
+}: {
+  headline: string;
+  image: EkImageValue;
+  cta?: EkLinkValue;
+}) {
+  return (
+    <section>
+      <h1>{headline}</h1>
+      {image?.url ? <img src={image.url} alt={image.alt ?? ""} /> : null}
+      {cta ? <a href={cta.href}>{cta.label ?? cta.href}</a> : null}
+    </section>
+  );
+}
+",
+  "blocks/registry.ts": "import { createRegistry } from "@editkraft/react";
+import { defineBlock, ekText, ekImage, ekLink } from "@editkraft/schema";
+import { z } from "zod";
+import { Hero } from "./Hero";
+
+/**
+ * Block-Registry: paart jede Block-Definition mit ihrer React-Komponente.
+ * createRegistry validiert, dass jeder Typ Definition UND Komponente hat.
+ */
+export const registry = createRegistry([
+  {
+    definition: defineBlock({
+      type: "Hero",
+      label: "Hero-Bereich",
+      schema: z.object({
+        headline: ekText({ label: "Überschrift" }),
+        image: ekImage({ label: "Bild" }),
+        cta: ekLink({ label: "Button" }).optional(),
+      }),
+    }),
+    component: Hero,
+  },
+]);
+",
+  "editkraft.config.ts": "import type { EditkraftConfig } from "@editkraft/react";
+
+/**
+ * Editkraft-Konfiguration deines Projekts.
+ * Die erlaubte Studio-Origin kommt aus der ENV (kein Hardcoding von Secrets).
+ */
+export default {
+  // Pfad zur Block-Registry (siehe blocks/registry.ts)
+  registry: "./blocks/registry",
+  // Erlaubte Origin des Studios für die Preview-Bridge (postMessage-Origin-Check)
+  studioOrigin: process.env.NEXT_PUBLIC_EDITKRAFT_STUDIO_ORIGIN ?? "",
+} satisfies EditkraftConfig;
+",
+  "supabase/migrations/20260101000000_editkraft_init.sql": "-- Editkraft: Content-Tabellen im Kundenprojekt (Prefix ek_).
+-- Erzeugt von: editkraft init
+
+-- Status-Enum (idempotent)
+do $$
+begin
+  if not exists (select 1 from pg_type where typname = 'ek_page_status') then
+    create type public.ek_page_status as enum ('draft', 'published');
+  end if;
+end $$;
+
+-- updated_at-Trigger-Funktion
+create or replace function public.ek_set_updated_at()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  new.updated_at := now();
+  return new;
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- ek_pages
+-- ---------------------------------------------------------------------------
+create table if not exists public.ek_pages (
+  id uuid primary key default gen_random_uuid(),
+  slug text not null unique,
+  title text not null,
+  meta jsonb not null default '{}'::jsonb,
+  status public.ek_page_status not null default 'draft',
+  published_version_id uuid,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+drop trigger if exists ek_pages_set_updated_at on public.ek_pages;
+create trigger ek_pages_set_updated_at before update on public.ek_pages
+  for each row execute function public.ek_set_updated_at();
+
+-- ---------------------------------------------------------------------------
+-- ek_page_versions (append-only; jede Speicherung ist eine neue Version)
+-- ---------------------------------------------------------------------------
+create table if not exists public.ek_page_versions (
+  id uuid primary key default gen_random_uuid(),
+  page_id uuid not null references public.ek_pages (id) on delete cascade,
+  content jsonb not null,
+  schema_version text not null,
+  created_by uuid,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists ek_page_versions_page_id_idx
+  on public.ek_page_versions (page_id);
+
+-- FK erst nach ek_page_versions setzbar (published_version_id -> version)
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'ek_pages_published_version_fk'
+  ) then
+    alter table public.ek_pages
+      add constraint ek_pages_published_version_fk
+      foreign key (published_version_id)
+      references public.ek_page_versions (id) on delete set null;
+  end if;
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- ek_assets
+-- ---------------------------------------------------------------------------
+create table if not exists public.ek_assets (
+  id uuid primary key default gen_random_uuid(),
+  storage_path text not null,
+  alt text,
+  width int,
+  height int,
+  mime_type text not null,
+  created_at timestamptz not null default now()
+);
+
+-- ---------------------------------------------------------------------------
+-- Storage-Bucket für Assets (public: veröffentlichte Bilder sind öffentlich)
+-- ---------------------------------------------------------------------------
+insert into storage.buckets (id, name, public)
+values ('ek-assets', 'ek-assets', true)
+on conflict (id) do nothing;
+
+-- ---------------------------------------------------------------------------
+-- RLS: anon/authenticated lesen NUR published Content.
+-- Schreiben & Draft-Reads laufen über service_role (umgeht RLS).
+-- ---------------------------------------------------------------------------
+alter table public.ek_pages enable row level security;
+alter table public.ek_page_versions enable row level security;
+alter table public.ek_assets enable row level security;
+
+grant select on public.ek_pages to anon, authenticated;
+grant select on public.ek_page_versions to anon, authenticated;
+grant select on public.ek_assets to anon, authenticated;
+
+drop policy if exists "ek public reads published pages" on public.ek_pages;
+create policy "ek public reads published pages"
+  on public.ek_pages for select
+  to anon, authenticated
+  using (status = 'published' and published_version_id is not null);
+
+drop policy if exists "ek public reads published versions" on public.ek_page_versions;
+create policy "ek public reads published versions"
+  on public.ek_page_versions for select
+  to anon, authenticated
+  using (
+    id in (
+      select published_version_id from public.ek_pages
+      where status = 'published' and published_version_id is not null
+    )
+  );
+
+drop policy if exists "ek public reads assets" on public.ek_assets;
+create policy "ek public reads assets"
+  on public.ek_assets for select
+  to anon, authenticated
+  using (true);
+",
+}
+`;

@@ -1,0 +1,47 @@
+{
+  "name": "editkraft",
+  "version": "0.1.0",
+  "description": "Editkraft-CLI: init & doctor für Next.js-Projekte mit Supabase",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "editkraft": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@clack/prompts": "^0.7.0",
+    "picocolors": "^1.1.0"
+  },
+  "peerDependencies": {
+    "@editkraft/schema": "^0.1.0"
+  },
+  "devDependencies": {
+    "@editkraft/schema": "workspace:*",
+    "@types/node": "^20.14.0",
+    "tsup": "^8.5.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tokyn-studio/editkraft.git",
+    "directory": "packages/cli"
+  }
+}

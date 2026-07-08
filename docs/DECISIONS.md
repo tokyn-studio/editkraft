@@ -51,6 +51,28 @@ Fremd-/Fehl-Nachrichten `null` statt zu werfen, damit die Bridge robust bleibt.
 Die Origin-Prüfung (`isAllowedOrigin`) ist verpflichtend und liegt beim
 Empfänger – das Protokoll authentifiziert nicht selbst.
 
+## ADR-009: Kunden-Tabellen mit Prefix `ek_`, published-only-RLS
+Die CLI legt `ek_pages`, `ek_page_versions`, `ek_assets` an (Prefix zur
+Kollisionsvermeidung im Kundenprojekt). RLS: `anon`/`authenticated` lesen
+ausschließlich published Content (Versionen nur über `published_version_id`
+verknüpft); alle Schreibzugriffe und Draft-Reads laufen über `service_role`
+(umgeht RLS, bekommt daher keine Policies). Damit hält der Lese-Pfad das
+Produktversprechen ohne Editkraft-Infrastruktur.
+
+## ADR-010: `editkraft init` ist idempotent und überschreibt nie ungefragt
+Generierte Dateien werden nur angelegt, wenn sie fehlen (sonst „skipped"),
+außer `--force`. Eine bereits vorhandene `*_editkraft_init.sql` wird per
+Timestamp wiederverwendet, sodass ein erneuter Lauf keine zweite Migration
+erzeugt. Die Generatoren sind reine Funktionen (`generateFiles`) und werden
+per Snapshot getestet; das Anwenden (`applyFiles`) ist davon getrennt.
+
+## ADR-011: CLI dependency-arm, Contract als Peer-Range
+Die CLI nutzt nur `@clack/prompts` und `picocolors` (Node ≥ 20, ESM). Sie
+importiert `@editkraft/schema` nicht zur Laufzeit (die generierten Dateien
+referenzieren es), deklariert die Kompatibilität aber als Peer-Range, damit die
+SemVer-Disziplin über alle Pakete sichtbar ist. RLS-Tests liegen als
+SQL-Fixture (`packages/cli/test/rls.fixture.sql`, via `set local role`).
+
 ## Offene TODOs (Nicht-Ziele dieses Repos, bewusst verschoben)
 - i18n-Content, Scheduling, Freigabe-Workflows – Feature-Ebene, nicht Contract.
 - Content-Migrationen zwischen Major-Versionen: nur Gerüst (`migrateContent`,
