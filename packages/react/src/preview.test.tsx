@@ -185,4 +185,36 @@ describe("RichText-Mini-Toolbar", () => {
     });
     expect(container.querySelector('[data-editkraft-toolbar]')).toBeNull();
   });
+
+  it("Klick auf einen Toolbar-Button meldet ek:update für das fokussierte richText-Feld", () => {
+    vi.useFakeTimers();
+    const { container } = render(<EditkraftPreview content={content} registry={registry} studioOrigin={STUDIO} />);
+    const el = fieldEl(container, "b3", "body");
+    act(() => {
+      el.focus();
+      el.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      const sel = window.getSelection()!;
+      sel.removeAllRanges();
+      sel.addRange(range);
+      document.dispatchEvent(new Event("selectionchange"));
+    });
+    expect(container.querySelector('[data-editkraft-toolbar]')).toBeTruthy();
+
+    const post = vi.spyOn(window.parent, "postMessage");
+    post.mockClear();
+    const button = container.querySelector('[data-editkraft-toolbar] button') as HTMLElement;
+    expect(button).toBeTruthy();
+    act(() => {
+      fireEvent.click(button);
+      vi.advanceTimersByTime(400);
+    });
+    const upd = post.mock.calls
+      .map((c) => c[0] as { type: string; blockId?: string; props?: Record<string, unknown> })
+      .find((x) => x.type === "ek:update");
+    expect(upd?.blockId).toBe("b3");
+    post.mockRestore();
+    vi.useRealTimers();
+  });
 });

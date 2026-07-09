@@ -26,3 +26,11 @@ if (typeof Range !== "undefined" && !Range.prototype.getClientRects) {
     return Object.assign([], { item: () => null }) as unknown as DOMRectList;
   };
 }
+
+// jsdom implementiert document.execCommand überhaupt nicht (undefined statt No-op).
+// Die RichText-Mini-Toolbar ruft es für bold/italic/link auf; ohne Stub bricht
+// applyFormat() mit "document.execCommand is not a function" ab, bevor die
+// eigentliche Selector-/Sanitize-/Debounce-Pipeline getestet werden kann.
+if (typeof document !== "undefined" && typeof document.execCommand !== "function") {
+  document.execCommand = () => false;
+}
