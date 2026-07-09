@@ -27,6 +27,18 @@ describe("sanitizeRichText", () => {
     expect(sanitizeRichText('<a href="/x" onclick="evil()">t</a>')).toBe('<a href="/x">t</a>');
   });
 
+  it("verwirft protocol-relative hrefs (//evil.example, Text bleibt)", () => {
+    expect(sanitizeRichText('<a href="//evil.example/x">t</a>')).toBe("t");
+  });
+
+  it("verwirft backslash-normalisierte hrefs (/\\evil.example, Text bleibt)", () => {
+    expect(sanitizeRichText('<a href="/\\evil.example/x">t</a>')).toBe("t");
+  });
+
+  it("behält legitime relative Pfade (/about)", () => {
+    expect(sanitizeRichText('<a href="/about">t</a>')).toBe('<a href="/about">t</a>');
+  });
+
   it("escapt rohe Winkelklammern in Text", () => {
     expect(sanitizeRichText("1 < 2 & 3 > 0")).toBe("1 &lt; 2 &amp; 3 &gt; 0");
   });

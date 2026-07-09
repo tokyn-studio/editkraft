@@ -16,7 +16,7 @@ export const RICH_TEXT_ALLOWLIST = {
 } as const;
 
 const TAG_ALIASES: Record<string, string> = { b: "strong", i: "em" };
-const SAFE_HREF = /^(https?:\/\/|mailto:|tel:|\/)/i;
+const SAFE_HREF = /^(https?:\/\/|mailto:|tel:|\/(?![\/\\]))/i;
 
 /** Escapt Text-Knoten. Entity-bewusst bei `&`, damit die Funktion idempotent bleibt. */
 function escapeText(s: string): string {
