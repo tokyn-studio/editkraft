@@ -38,7 +38,7 @@ Primitive-Konfiguration.
 | Primitive | Wert-Typ | Metadaten (`kind` + Config) |
 | --- | --- | --- |
 | `ekText({ label?, multiline? })` | `string` | `text` |
-| `ekRichText({ label? })` | `string` (HTML/Markdown) | `richText` |
+| `ekRichText({ label? })` | `string` (sanitisiertes HTML, siehe `sanitizeRichText`) | `richText` |
 | `ekImage({ label? })` | `EkImageValue` (`assetId`, `alt?`, `url?`, `width?`, `height?`) | `image` |
 | `ekLink({ label? })` | `EkLinkValue` (`href`, `label?`, `external?`) | `link` |
 | `ekColor({ label? })` | `string` (Hex `#rrggbb` oder Token) | `color` |
@@ -47,6 +47,15 @@ Primitive-Konfiguration.
 
 `getFieldMeta`, `isEkField` sowie die Wert-Schemas `ekImageValue`,
 `ekLinkValue`, `ekReferenceValue` sind exportiert.
+
+**Rich-Text-Format:** `ekRichText` speichert ein sanitisiertes HTML-Subset. Die
+Allowlist (`RICH_TEXT_ALLOWLIST`: `strong`, `em`, `a[href]`) und die reine Funktion
+`sanitizeRichText(html)` sind exportiert; Renderer (Ausgabe) und Inline-Editor
+(Eingabe) nutzen denselben Sanitizer. `renderBlocks`/`EditkraftPage` sanitisieren
+`richText`-Props automatisch zentral vor der Übergabe an die Block-Komponente –
+Block-Autoren bekommen sicheren Output, ohne selbst `sanitizeRichText` aufrufen zu
+müssen. `data-ek-field="<key>"` am DOM-Element bindet es an sein Feld und macht es
+im Studio direkt editierbar.
 
 ## Block-Definition
 
@@ -98,7 +107,8 @@ Jede Nachricht trägt `channel: "editkraft"` und `v: PROTOCOL_VERSION`.
 | --- | --- | --- |
 | `ek:ready` | Preview → Studio | `schemaVersion` |
 | `ek:select` | beide | `blockId` |
-| `ek:update` | Studio → Preview | `blockId`, `props` |
+| `ek:update` | beide | `blockId`, `props` (Studio setzt / Preview meldet Inline-Edit) |
+| `ek:focus-field` | Preview → Studio | `blockId`, `fieldKey` (Feld fokussiert / Bild-Klick) |
 | `ek:tree` | Preview → Studio | `content: PageContent` |
 
 - `createMessage(type, payload)` baut eine gültige Nachricht.

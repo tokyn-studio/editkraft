@@ -70,6 +70,7 @@ export {
   ekUpdateMessage,
   ekTreeMessage,
   ekSchemaMessage,
+  ekFocusFieldMessage,
   ekMessage,
   parseMessage,
   createMessage,
@@ -79,6 +80,9 @@ export {
   type EkUpdateMessage,
   type EkTreeMessage,
   type EkSchemaMessage,
+  type EkFocusFieldMessage,
   type EkMessage,
   type BlockSchemaDescriptor,
 } from "./protocol";
+
+export { RICH_TEXT_ALLOWLIST, sanitizeRichText } from "./rich-text";

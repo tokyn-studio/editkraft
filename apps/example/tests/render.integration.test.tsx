@@ -41,8 +41,11 @@ beforeAll(async () => {
   const content = {
     schemaVersion: "0.1.0",
     blocks: [
-      { id: "b1", type: "Hero", props: { headline: "Willkommen bei Editkraft", subline: "Zwei Blöcke" } },
-      { id: "b2", type: "RichText", props: { html: "<p>Zweiter Block</p>" } },
+      { id: "b1", type: "Hero", props: {
+        headline: "Willkommen bei Editkraft",
+        body: "<b>Zwei</b> Blöcke",
+        image: { assetId: "", url: "" },
+      } },
     ],
   };
   const { data: version } = await admin
@@ -65,14 +68,12 @@ describe.skipIf(!canRun)("Renderer-Integration", () => {
   it("rendert eine Seite mit zwei Blöcken aus der lokalen Supabase (Anon/RLS)", async () => {
     const page = await loadPublishedPage(anon, SLUG);
     expect(page).not.toBeNull();
-    expect(page!.content.blocks).toHaveLength(2);
+    expect(page!.content.blocks).toHaveLength(1);
 
     const html = renderToStaticMarkup(renderBlocks(page!.content.blocks, registry));
     expect(html).toContain("Willkommen bei Editkraft");
-    expect(html).toContain("Zwei Blöcke");
-    expect(html).toContain("Zweiter Block");
-    expect(html).toContain('data-block="Hero"');
-    expect(html).toContain('data-block="RichText"');
+    expect(html).toContain('data-ek-field="headline"');
+    expect(html).toContain("<strong>Zwei</strong>");
   });
 
   it("Anon sieht Draft-Seiten NICHT (RLS)", async () => {
