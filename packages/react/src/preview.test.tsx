@@ -9,10 +9,10 @@ import { EditkraftPreview } from "./preview";
 const STUDIO = "https://studio.editkraft.test";
 
 function Hero({ headline }: { headline: string }) {
-  return <h1>{headline}</h1>;
+  return <h1 data-ek-field="headline">{headline}</h1>;
 }
 function Text({ body }: { body: string }) {
-  return <p>{body}</p>;
+  return <p data-ek-field="body">{body}</p>;
 }
 const registry = createRegistry([
   { definition: defineBlock({ type: "Hero", label: "Hero", schema: z.object({ headline: ekText() }) }), component: Hero },
@@ -98,5 +98,59 @@ describe("EditkraftPreview (postMessage-Bridge)", () => {
     await new Promise((r) => setTimeout(r, 20));
     expect(screen.getByText("Original")).toBeTruthy();
     expect(screen.queryByText("Böse")).toBeNull();
+  });
+});
+
+function fieldEl(container: HTMLElement, blockId: string, key: string): HTMLElement {
+  return container.querySelector(
+    `[data-editkraft-block-id="${blockId}"] [data-ek-field="${key}"]`,
+  ) as HTMLElement;
+}
+
+describe("Inline-Editing", () => {
+  it("macht text-Felder contentEditable", () => {
+    const { container } = render(<EditkraftPreview content={content} registry={registry} studioOrigin={STUDIO} />);
+    expect(fieldEl(container, "b1", "headline").getAttribute("contenteditable")).toBe("true");
+  });
+
+  it("Tippen im Feld sendet ek:update an das Studio", async () => {
+    vi.useFakeTimers();
+    const post = vi.spyOn(window.parent, "postMessage");
+    const { container } = render(<EditkraftPreview content={content} registry={registry} studioOrigin={STUDIO} />);
+    const el = fieldEl(container, "b1", "headline");
+    post.mockClear();
+    act(() => {
+      el.focus();
+      el.textContent = "Neu getippt";
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      vi.advanceTimersByTime(400);
+    });
+    const upd = post.mock.calls.map((c) => c[0] as { type: string; blockId?: string; props?: Record<string, unknown> }).find((x) => x.type === "ek:update");
+    expect(upd?.blockId).toBe("b1");
+    expect(upd?.props?.headline).toBe("Neu getippt");
+    post.mockRestore();
+    vi.useRealTimers();
+  });
+
+  it("Fokus in ein Feld meldet ek:focus-field", () => {
+    const post = vi.spyOn(window.parent, "postMessage");
+    const { container } = render(<EditkraftPreview content={content} registry={registry} studioOrigin={STUDIO} />);
+    post.mockClear();
+    act(() => fieldEl(container, "b1", "headline").dispatchEvent(new FocusEvent("focusin", { bubbles: true })));
+    const focus = post.mock.calls.map((c) => c[0] as { type: string; fieldKey?: string }).find((x) => x.type === "ek:focus-field");
+    expect(focus?.fieldKey).toBe("headline");
+    post.mockRestore();
+  });
+
+  it("Echo-Guard: eingehendes ek:update überschreibt das fokussierte Feld nicht", () => {
+    const { container } = render(<EditkraftPreview content={content} registry={registry} studioOrigin={STUDIO} />);
+    const el = fieldEl(container, "b1", "headline");
+    act(() => {
+      el.focus();
+      el.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+      el.textContent = "Vom Nutzer getippt";
+    });
+    dispatchFromStudio(createMessage("ek:update", { blockId: "b1", props: { headline: "Echo vom Studio" } }));
+    expect(fieldEl(container, "b1", "headline").textContent).toBe("Vom Nutzer getippt");
   });
 });
