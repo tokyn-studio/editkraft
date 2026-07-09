@@ -8,3 +8,6 @@ bidirektionales Protokoll dokumentiert, dependency-freier `sanitizeRichText` +
 `RICH_TEXT_ALLOWLIST` (RichText-Speicherformat = sanitisiertes HTML-Subset).
 Renderer/Preview-Bridge macht `data-ek-field`-Elemente inline editierbar
 (contentEditable, Mini-Toolbar für RichText, Bild-Klick → `ek:focus-field`).
+Der Renderer (`renderBlocks`/`EditkraftPage`) sanitisiert `richText`-Props jetzt
+zentral vor der Übergabe an die Block-Komponente – secure-by-default, unabhängig
+davon, ob der Block-Autor selbst `sanitizeRichText` aufruft.

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { z } from "zod";
-import { defineBlock, ekText, type Block } from "@editkraft/schema";
+import { defineBlock, ekRichText, ekText, type Block } from "@editkraft/schema";
 import { createRegistry } from "./registry";
 import { renderBlocks } from "./render";
 
@@ -10,6 +10,10 @@ function Heading({ headline }: { headline: string }) {
 }
 function Section({ children }: { children?: React.ReactNode }) {
   return <section>{children}</section>;
+}
+/** Simuliert einen nachlässigen Block-Autor: kein eigener sanitizeRichText-Aufruf. */
+function CarelessRichText({ body }: { body: string }) {
+  return <div dangerouslySetInnerHTML={{ __html: body }} />;
 }
 
 const registry = createRegistry([
@@ -20,6 +24,14 @@ const registry = createRegistry([
   {
     definition: defineBlock({ type: "Section", label: "Sektion", slots: ["children"], schema: z.object({}) }),
     component: Section,
+  },
+  {
+    definition: defineBlock({
+      type: "CarelessRichText",
+      label: "Nachlässiger RichText-Block",
+      schema: z.object({ body: ekRichText() }),
+    }),
+    component: CarelessRichText,
   },
 ]);
 
@@ -65,5 +77,18 @@ describe("renderBlocks", () => {
     const bad: Block[] = [{ id: "b", type: "Heading", props: { headline: 123 } }];
     expect(html(bad, false)).toBe("");
     expect(html(bad, true)).toContain("Ungültige Props");
+  });
+
+  it("sanitisiert richText-Props zentral, auch wenn die Komponente selbst nicht sanitisiert", () => {
+    const out = html([
+      {
+        id: "r",
+        type: "CarelessRichText",
+        props: { body: "<script>alert(1)</script><b>fett</b>" },
+      },
+    ]);
+    expect(out).not.toContain("<script>");
+    expect(out).not.toContain("alert(1)");
+    expect(out).toContain("<strong>fett</strong>");
   });
 });

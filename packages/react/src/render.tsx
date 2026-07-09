@@ -1,5 +1,5 @@
 import { Fragment, type ReactNode, createElement } from "react";
-import type { Block } from "@editkraft/schema";
+import { sanitizeRichText, type Block, type BlockFieldDescriptor } from "@editkraft/schema";
 import type { Registry } from "./registry";
 
 export interface RenderOptions {
@@ -27,6 +27,29 @@ function Placeholder({ text }: { text: string }): ReactNode {
     },
     text,
   );
+}
+
+/**
+ * Sanitisiert alle richText-Props zentral, bevor sie an die Komponente gehen –
+ * secure-by-default, unabhängig davon, ob der Block-Autor selbst
+ * `sanitizeRichText` aufruft. Mutiert `props` nicht.
+ *
+ * Bekannte Einschränkung: nur Top-Level-richText-Felder werden erfasst.
+ * richText INNERHALB von `ekList(...)`-Items wird (noch) nicht sanitisiert.
+ */
+function sanitizeRichTextProps(
+  props: Record<string, unknown>,
+  fields: BlockFieldDescriptor[],
+): Record<string, unknown> {
+  let result = props;
+  for (const field of fields) {
+    if (field.kind !== "richText") continue;
+    const value = props[field.key];
+    if (typeof value !== "string") continue;
+    if (result === props) result = { ...props };
+    result[field.key] = sanitizeRichText(value);
+  }
+  return result;
 }
 
 /**
@@ -67,9 +90,14 @@ function renderBlock(block: Block, registry: Registry, options: RenderOptions): 
       ? renderBlocks(block.children, registry, options)
       : undefined;
 
+  const props = sanitizeRichTextProps(
+    parsed.data as Record<string, unknown>,
+    entry.definition.fields,
+  );
+
   return createElement(entry.component, {
     key: block.id,
-    ...(parsed.data as Record<string, unknown>),
+    ...props,
     children,
   });
 }

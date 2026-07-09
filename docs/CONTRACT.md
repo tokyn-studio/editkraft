@@ -51,8 +51,11 @@ Primitive-Konfiguration.
 **Rich-Text-Format:** `ekRichText` speichert ein sanitisiertes HTML-Subset. Die
 Allowlist (`RICH_TEXT_ALLOWLIST`: `strong`, `em`, `a[href]`) und die reine Funktion
 `sanitizeRichText(html)` sind exportiert; Renderer (Ausgabe) und Inline-Editor
-(Eingabe) nutzen denselben Sanitizer. `data-ek-field="<key>"` am DOM-Element bindet
-es an sein Feld und macht es im Studio direkt editierbar.
+(Eingabe) nutzen denselben Sanitizer. `renderBlocks`/`EditkraftPage` sanitisieren
+`richText`-Props automatisch zentral vor der Übergabe an die Block-Komponente –
+Block-Autoren bekommen sicheren Output, ohne selbst `sanitizeRichText` aufrufen zu
+müssen. `data-ek-field="<key>"` am DOM-Element bindet es an sein Feld und macht es
+im Studio direkt editierbar.
 
 ## Block-Definition
 
