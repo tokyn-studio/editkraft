@@ -43,7 +43,7 @@ packages/react   @editkraft/react   – Renderer, Registry, Preview-Bridge
 packages/cli     editkraft          – npx editkraft init | doctor
 skills/editkraft Claude-Code-Skill
 apps/example      Next.js-Testbett (nicht published)
-docs/             DECISIONS.md, CONTRACT.md
+docs/             ROADMAP.md, DECISIONS.md, CONTRACT.md
 ```
 
 ## Der Contract (`@editkraft/schema`)
@@ -76,7 +76,9 @@ das Studio-Team liest nur diese beiden Dateien.
 - Der visuelle Editor (UI, Drag&Drop, Formulare) – Studio-Repo. Hier nur
   Preview-Bridge + Protokoll.
 - Auth, Orgs, Billing, Entitlements – Studio-Repo.
-- i18n, Scheduling, Freigabe-Workflows – als TODO in `docs/DECISIONS.md`, nicht bauen.
+- Feature-Scope verbindlich in `docs/ROADMAP.md` (gilt bei Widerspruch zu diesem Dokument):
+  i18n-Datenmodell ist v1-CONTRACT (Roadmap 1.4), Scheduling erst V2 (2.6),
+  Freigabe-Workflows Studio-Repo (2.5).
 - Pages Router / andere Frameworks – App Router only.
 
 ## Meilensteine
