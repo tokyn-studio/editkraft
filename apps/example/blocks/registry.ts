@@ -1,5 +1,5 @@
 import { createRegistry } from "@editkraft/react";
-import { defineBlock, ekText, ekImage, ekLink } from "@editkraft/schema";
+import { defineBlock, ekText, ekRichText, ekImage, ekLink } from "@editkraft/schema";
 import { z } from "zod";
 import { Hero } from "./Hero";
 
@@ -14,6 +14,7 @@ export const registry = createRegistry([
       label: "Hero-Bereich",
       schema: z.object({
         headline: ekText({ label: "Überschrift" }),
+        body: ekRichText({ label: "Fließtext" }).optional(),
         image: ekImage({ label: "Bild" }),
         cta: ekLink({ label: "Button" }).optional(),
       }),
