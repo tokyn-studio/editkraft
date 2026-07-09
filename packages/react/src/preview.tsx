@@ -27,6 +27,15 @@ function postToStudio(message: unknown, origin: string): void {
   window.parent.postMessage(message, origin);
 }
 
+const toolbarBtn = {
+  color: "#fff",
+  background: "transparent",
+  border: "none",
+  cursor: "pointer",
+  fontWeight: 700,
+  padding: "2px 8px",
+} as const;
+
 function PreviewBlocks({
   blocks,
   registry,
@@ -97,6 +106,7 @@ export function EditkraftPreview({
 }: EditkraftPreviewProps): ReactNode {
   const [tree, setTree] = useState<PageContent>(content);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [toolbar, setToolbar] = useState<{ top: number; left: number } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const focusedRef = useRef<{ blockId: string; fieldKey: string } | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -166,6 +176,29 @@ export function EditkraftPreview({
     }
   });
 
+  // RichText-Mini-Toolbar: bei nicht-leerer Selektion im fokussierten richText-Feld einblenden.
+  useEffect(() => {
+    const onSelectionChange = () => {
+      const sel = typeof window !== "undefined" ? window.getSelection() : null;
+      const focused = focusedRef.current;
+      if (!sel || sel.rangeCount === 0 || sel.isCollapsed || !focused) {
+        setToolbar(null);
+        return;
+      }
+      const type = blockTypeOf(focused.blockId);
+      const kind = type ? fieldKindOf(type, focused.fieldKey) : undefined;
+      if (kind !== "richText") {
+        setToolbar(null);
+        return;
+      }
+      const rect = sel.getRangeAt(0).getBoundingClientRect();
+      setToolbar({ top: Math.max(0, rect.top - 40), left: rect.left });
+    };
+    document.addEventListener("selectionchange", onSelectionChange);
+    return () => document.removeEventListener("selectionchange", onSelectionChange);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const currentValueFromDom = (el: HTMLElement, kind: EkFieldKind): string =>
     kind === "richText" ? sanitizeRichText(el.innerHTML) : (el.textContent ?? "");
 
@@ -216,9 +249,48 @@ export function EditkraftPreview({
     postToStudio(createMessage("ek:select", { blockId: id }), studioOrigin);
   };
 
+  const applyFormat = (command: "bold" | "italic" | "link") => {
+    const focused = focusedRef.current;
+    if (!focused) return;
+    if (command === "link") {
+      const href = typeof window !== "undefined" ? window.prompt("Link-Ziel (https://…)") : null;
+      if (href) document.execCommand("createLink", false, href);
+    } else {
+      document.execCommand(command);
+    }
+    const el = containerRef.current?.querySelector<HTMLElement>(
+      `[data-editkraft-block-id="${focused.blockId}"] [data-ek-field="${focused.fieldKey}"]`,
+    );
+    if (el) sendUpdateDebounced(focused.blockId, focused.fieldKey, sanitizeRichText(el.innerHTML));
+  };
+
   return createElement(
     "div",
     { ref: containerRef, onInput, onFocusCapture: onFocusIn, onBlurCapture: onFocusOut },
     createElement(PreviewBlocks, { blocks: tree.blocks, registry, selectedId, onSelect }),
+    toolbar
+      ? createElement(
+          "div",
+          {
+            "data-editkraft-toolbar": "true",
+            style: {
+              position: "fixed",
+              top: toolbar.top,
+              left: toolbar.left,
+              display: "flex",
+              gap: 4,
+              padding: 4,
+              background: "#111827",
+              borderRadius: 6,
+              zIndex: 2147483647,
+            },
+            // Toolbar-Klicks dürfen die Selektion nicht verlieren.
+            onMouseDown: (e: { preventDefault: () => void }) => e.preventDefault(),
+          },
+          createElement("button", { type: "button", onClick: () => applyFormat("bold"), style: toolbarBtn }, "B"),
+          createElement("button", { type: "button", onClick: () => applyFormat("italic"), style: toolbarBtn }, "i"),
+          createElement("button", { type: "button", onClick: () => applyFormat("link"), style: toolbarBtn }, "🔗"),
+        )
+      : null,
   );
 }

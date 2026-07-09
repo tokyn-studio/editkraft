@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { act } from "react";
 import { render, screen, fireEvent, cleanup, waitFor } from "@testing-library/react";
 import { z } from "zod";
-import { defineBlock, ekText, createMessage, type PageContent } from "@editkraft/schema";
+import { defineBlock, ekText, ekRichText, createMessage, type PageContent } from "@editkraft/schema";
 import { createRegistry } from "./registry";
 import { EditkraftPreview } from "./preview";
 
@@ -14,9 +14,13 @@ function Hero({ headline }: { headline: string }) {
 function Text({ body }: { body: string }) {
   return <p data-ek-field="body">{body}</p>;
 }
+function Prose({ body }: { body: string }) {
+  return <div data-ek-field="body" dangerouslySetInnerHTML={{ __html: body }} />;
+}
 const registry = createRegistry([
   { definition: defineBlock({ type: "Hero", label: "Hero", schema: z.object({ headline: ekText() }) }), component: Hero },
   { definition: defineBlock({ type: "Text", label: "Text", schema: z.object({ body: ekText() }) }), component: Text },
+  { definition: defineBlock({ type: "Prose", label: "Prosa", schema: z.object({ body: ekRichText() }) }), component: Prose },
 ]);
 
 const content: PageContent = {
@@ -24,6 +28,7 @@ const content: PageContent = {
   blocks: [
     { id: "b1", type: "Hero", props: { headline: "Original" } },
     { id: "b2", type: "Text", props: { body: "Zweiter" } },
+    { id: "b3", type: "Prose", props: { body: "<strong>fett</strong> normal" } },
   ],
 };
 
@@ -152,5 +157,32 @@ describe("Inline-Editing", () => {
     });
     dispatchFromStudio(createMessage("ek:update", { blockId: "b1", props: { headline: "Echo vom Studio" } }));
     expect(fieldEl(container, "b1", "headline").textContent).toBe("Vom Nutzer getippt");
+  });
+});
+
+describe("RichText-Mini-Toolbar", () => {
+  it("erscheint bei nicht-leerer Selektion in einem richText-Feld", () => {
+    const { container } = render(<EditkraftPreview content={content} registry={registry} studioOrigin={STUDIO} />);
+    const el = fieldEl(container, "b3", "body");
+    act(() => {
+      el.focus();
+      el.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      const sel = window.getSelection()!;
+      sel.removeAllRanges();
+      sel.addRange(range);
+      document.dispatchEvent(new Event("selectionchange"));
+    });
+    expect(container.querySelector('[data-editkraft-toolbar]')).toBeTruthy();
+  });
+
+  it("bleibt bei leerer/kollabierter Selektion verborgen", () => {
+    const { container } = render(<EditkraftPreview content={content} registry={registry} studioOrigin={STUDIO} />);
+    act(() => {
+      window.getSelection()?.removeAllRanges();
+      document.dispatchEvent(new Event("selectionchange"));
+    });
+    expect(container.querySelector('[data-editkraft-toolbar]')).toBeNull();
   });
 });
