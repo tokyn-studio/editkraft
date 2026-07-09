@@ -115,6 +115,16 @@ Service-Key erreicht nie den Browser.
 aktualisiert; die Selektion läuft über Klick-Overlays je Block. Die Message-Typen
 kommen aus dem Contract (`@editkraft/schema`).
 
+## ADR-018: Direct Manipulation – data-ek-field-Binding, HTML-Subset-RichText, Echo-Guard
+Inline-Editing bindet Elemente per `data-ek-field`-Attribut (kein Wrapper, kein Import,
+Server-Component-tauglich); die Bridge löst den Feld-`kind` über die Registry auf.
+`ekRichText` wird als sanitisiertes HTML-Subset gespeichert – ein kanonischer,
+dependency-freier `sanitizeRichText` (rebuild-from-scratch, `href`-Protokoll-Allowlist,
+idempotent) wird von Renderer und Editor geteilt. `ek:update` ist bidirektional;
+`ek:focus-field` neu. Kernrisiko React↔DOM gelöst über den **Echo-Guard**: das
+fokussierte Feld ist uncontrolled – eingehendes `ek:update` überschreibt es nicht, der
+finale Wert wird erst bei Blur in den State übernommen.
+
 ## Offene TODOs (Nicht-Ziele dieses Repos, bewusst verschoben)
 - Playwright-Browser-Smoke der Example-App (aktuell: Integrationstest + Next-Build).
 - Overlays für tief verschachtelte Slots (aktuell: Klick-Overlay je Block, rekursiv).
