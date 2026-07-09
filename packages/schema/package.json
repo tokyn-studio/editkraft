@@ -1,6 +1,6 @@
 {
   "name": "@editkraft/schema",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Editkraft-Contract: Blocktree-Format, Feld-Primitives, Zod-Schemas und postMessage-Protokoll",
   "license": "MIT",
   "type": "module",
