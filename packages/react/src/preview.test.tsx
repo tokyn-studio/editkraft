@@ -240,4 +240,29 @@ describe("Bild-Feld", () => {
     expect(focus?.fieldKey).toBe("image");
     post.mockRestore();
   });
+
+  it("Klick auf ein Bildfeld meldet genau EIN ek:select gefolgt von ek:focus-field, kein zweites ek:select danach", () => {
+    const post = vi.spyOn(window.parent, "postMessage");
+    const { container } = render(<EditkraftPreview content={content} registry={registry} studioOrigin={STUDIO} />);
+    post.mockClear();
+    fireEvent.click(fieldEl(container, "b4", "image"));
+
+    const messages = post.mock.calls.map((c) => c[0] as { type: string; blockId?: string; fieldKey?: string });
+    const selectMessages = messages.filter((m) => m.type === "ek:select");
+    const focusMessages = messages.filter((m) => m.type === "ek:focus-field");
+
+    // Genau ein ek:select (kein redundantes zweites vom Block-Wrapper-onClick).
+    expect(selectMessages.length).toBe(1);
+    expect(selectMessages[0]?.blockId).toBe("b4");
+
+    // Genau ein ek:focus-field mit dem richtigen Block/Feld.
+    expect(focusMessages.length).toBe(1);
+    expect(focusMessages[0]?.blockId).toBe("b4");
+    expect(focusMessages[0]?.fieldKey).toBe("image");
+
+    // Reihenfolge: ek:select, dann ek:focus-field – kein weiteres ek:select danach.
+    expect(messages.map((m) => m.type)).toEqual(["ek:select", "ek:focus-field"]);
+
+    post.mockRestore();
+  });
 });

@@ -244,7 +244,7 @@ export function EditkraftPreview({
     setTree((current) => updateBlockProps(current, f.blockId, { [f.fieldKey]: value }));
   };
 
-  const onClickCapture = (e: { target: EventTarget | null }) => {
+  const onClickCapture = (e: { target: EventTarget | null; stopPropagation: () => void }) => {
     const el = (e.target as HTMLElement | null)?.closest?.<HTMLElement>("[data-ek-field]");
     if (!el) return;
     const wrapper = el.closest<HTMLElement>("[data-editkraft-block-id]");
@@ -254,8 +254,13 @@ export function EditkraftPreview({
     const type = blockTypeOf(blockId);
     const kind = type ? fieldKindOf(type, fieldKey) : undefined;
     if (kind === "image") {
+      // Self-contained: Auswahl selbst setzen und Event stoppen, damit der
+      // bubble-phase onClick des Block-Wrappers (onSelect) nicht zusätzlich
+      // ein zweites, redundantes ek:select nach ek:focus-field sendet.
+      setSelectedId(blockId);
       postToStudio(createMessage("ek:select", { blockId }), studioOrigin);
       postToStudio(createMessage("ek:focus-field", { blockId, fieldKey }), studioOrigin);
+      e.stopPropagation();
     }
   };
 
