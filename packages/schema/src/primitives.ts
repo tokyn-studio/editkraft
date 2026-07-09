@@ -90,7 +90,7 @@ export function ekText(config: { label?: string; multiline?: boolean } = {}) {
   return tag(z.string(), { kind: "text", ...config });
 }
 
-/** Rich-Text als HTML/Markdown-String; die konkrete Serialisierung ist Renderer-Sache. */
+/** Rich-Text als sanitisiertes HTML-Subset (siehe RICH_TEXT_ALLOWLIST / sanitizeRichText). */
 export function ekRichText(config: { label?: string } = {}) {
   return tag(z.string(), { kind: "richText", ...config });
 }

@@ -84,3 +84,5 @@ export {
   type EkMessage,
   type BlockSchemaDescriptor,
 } from "./protocol";
+
+export { RICH_TEXT_ALLOWLIST, sanitizeRichText } from "./rich-text";
