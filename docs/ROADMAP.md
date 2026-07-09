@@ -11,15 +11,17 @@
 ### 1.1 Editor-Kern (Repo: editkraft-studio)
 Klick-Selektion im Preview-iframe, Feld-Editing in der Sidebar (Formulare aus Registry-Schemas generiert), Draft/Publish, Versionshistorie mit Rollback. Wie in den Initialprompts spezifiziert.
 
-### 1.2 Inline-Textediting im Preview
+### 1.2 Inline-Textediting im Preview — ✅ umgesetzt (2026-07-09)
 - **Repo editkraft (`@editkraft/react`):** Im Preview-Modus `contenteditable` auf Elemente legen, die an `ekText`/`ekRichText`-Felder gebunden sind. Änderungen debounced als `ek:update` an das Studio melden. KEINE strukturellen Edits inline (kein Einfügen/Löschen von Blöcken).
 - **Repo editkraft-studio:** eingehende `ek:update`-Events in die Draft-Version schreiben; Sidebar-Feld und Inline-Ansicht bleiben synchron.
 - DoD: Text im Preview tippen → Sidebar-Feld aktualisiert sich → Speichern erzeugt neue `ek_page_versions`-Version.
+- **Status:** Feld-Bindung über `data-ek-field`; Ein-Klick-zu-Tippen mit Echo-Guard (fokussiertes Feld bleibt uncontrolled); Rich-Text-Mini-Toolbar (Fett/Kursiv/Link). Rich-Text-Format als sanitisiertes HTML-Subset festgezurrt (`sanitizeRichText`/`RICH_TEXT_ALLOWLIST`, zentral im Renderer erzwungen). Neue Protokoll-Nachricht `ek:focus-field`, `ek:update` bidirektional. OSS in PR (`@editkraft/schema` 0.3.0 / `@editkraft/react` 0.4.0); Studio-Seite fertig, wartet auf npm-Release zum Pinnen. Specs/Pläne: `docs/superpowers/{specs,plans}/2026-07-09-direct-manipulation-*`.
 
 ### 1.3 Medienbibliothek
 - **Repo editkraft (CLI-Migration):** `ek_assets` wie spezifiziert; Storage-Bucket `ek-assets` mit RLS (public read, service write).
 - **Repo editkraft-studio:** Bibliotheks-UI (Upload mit Client-Resize auf max. 2560px, Suche, Alt-Text-Pflege, Löschen mit Verwendungsprüfung), Verwendungsnachweis je Asset ("genutzt auf N Seiten" via Blocktree-Scan), Asset-Picker als Eingabekomponente für `ekImage`-Felder.
 - Vorbereitung AI-Stufe 3: Upload-Pfad als wiederverwendbare Server-Funktion kapseln (`storeAsset()`), damit generierte Bilder später denselben Weg nehmen.
+- **Andockpunkt vorhanden:** Der Klick-Pfad für Bilder ist bereits gebaut (1.2-Scheibe) — Klick auf ein `ekImage`-Feld im Canvas meldet `ek:focus-field`, die Sidebar fokussiert das Bildfeld und zeigt „Bild ersetzen". Diese Scheibe ersetzt die aktuelle URL/assetId-Eingabe durch den echten Asset-Picker im selben Pfad.
 - DoD: Bild hochladen → in `ekImage`-Feld auswählen → published Seite rendert es aus dem Kunden-Storage.
 
 ### 1.4 Mehrsprachigkeit — Datenmodell + Basis-UI ⚠️ CONTRACT
