@@ -861,41 +861,53 @@ git commit -m "feat(react): image field click reports ek:focus-field (Bild erset
 **Files:**
 - Modify: `apps/example/blocks/Hero.tsx`
 - Modify: `apps/example/blocks/registry.ts`
-- Test: `apps/example/tests/render.integration.test.tsx`
+- Modify: `apps/example/package.json` (neues `test`-Script)
+- Modify: `apps/example/tests/render.integration.test.tsx` (Seed an image-basierten Hero anpassen)
+- Create: `apps/example/tests/hero-fields.test.tsx`
 
 **Interfaces:**
-- Consumes: `sanitizeRichText`, `ekRichText` aus `@editkraft/schema`.
-- Produces: Hero rendert `headline` (`data-ek-field="headline"`), ein neues `body` (`ekRichText`, sanitisiert ausgegeben, `data-ek-field="body"`) und das Bild (`data-ek-field="image"`) – die manuelle Browser-Verifikation hat damit alle drei Feldtypen.
+- Consumes: `sanitizeRichText`, `ekRichText` aus `@editkraft/schema`; die committete image-basierte `registry.ts`/`Hero.tsx` (Hero = `headline`/`image`/`cta`).
+- Produces: Hero rendert `headline` (`data-ek-field="headline"`), ein neues `body` (`ekRichText`, sanitisiert, `data-ek-field="body"`) und das Bild (`data-ek-field="image"`); ein **nicht-Supabase-gegatetes** Unit-Testfile beweist Marker + Sanitizing; `pnpm --filter @editkraft/example test` läuft (neues `test`-Script).
 
-- [ ] **Step 1: Failing test** — in `apps/example/tests/render.integration.test.tsx` einen Fall ergänzen, der prüft, dass der gerenderte Hero die `data-ek-field`-Marker trägt und RichText sanitisiert ausgibt. (Öffne die Datei, füge innerhalb der bestehenden `describe` einen `it`-Block ein — Muster an den vorhandenen Tests orientieren.)
+**Kontext (WICHTIG):** Die committete Beispiel-App ist image-basiert: `Hero` = `headline`/`image`/`cta`, Komponente in `Hero.tsx`, Registry in `registry.ts` (`editkraft.config.ts` verweist darauf). Es gibt bislang **nur** ein Supabase-gegatetes `test:integration`-Script (`vitest run`); der bestehende `render.integration.test.tsx` ist `describe.skipIf(!canRun)` und wird ohne Supabase-Keys **übersprungen**. Der neue Marker-Test braucht deshalb ein **eigenes, ungegatetes** File und ein `test`-Script. Zusätzlich seedet der Integrationstest noch die alte Struktur (Hero `subline` + `RichText`/`html`) – das wird auf den image-basierten Hero umgestellt, damit er, falls mit Keys ausgeführt, konsistent ist.
+
+- [ ] **Step 1: Failing test** — neue Datei `apps/example/tests/hero-fields.test.tsx` (eigener `describe`, nicht gegated):
 
 ```tsx
-it("Hero trägt data-ek-field-Marker und gibt RichText sanitisiert aus", () => {
-  const html = renderToStaticMarkup(
-    renderBlocks(
-      [{ id: "h", type: "Hero", props: {
-        headline: "Titel",
-        body: '<b>fett</b><script>alert(1)</script>',
-        image: { assetId: "", url: "" },
-      } }],
-      registry,
-    ),
-  );
-  expect(html).toContain('data-ek-field="headline"');
-  expect(html).toContain('data-ek-field="body"');
-  expect(html).toContain("<strong>fett</strong>");
-  expect(html).not.toContain("<script>");
+import { describe, expect, it } from "vitest";
+import { renderToStaticMarkup } from "react-dom/server";
+import { renderBlocks } from "@editkraft/react";
+import { registry } from "../blocks/registry";
+
+describe("Hero-Feld-Bindung", () => {
+  it("trägt data-ek-field-Marker und gibt RichText sanitisiert aus", () => {
+    const html = renderToStaticMarkup(
+      renderBlocks(
+        [{ id: "h", type: "Hero", props: {
+          headline: "Titel",
+          body: "<b>fett</b><script>alert(1)</script>",
+          image: { assetId: "", url: "" },
+        } }],
+        registry,
+      ),
+    );
+    expect(html).toContain('data-ek-field="headline"');
+    expect(html).toContain('data-ek-field="body"');
+    expect(html).toContain('data-ek-field="image"');
+    expect(html).toContain("<strong>fett</strong>");
+    expect(html).not.toContain("<script>");
+  });
 });
 ```
 
-> Falls `renderToStaticMarkup`/`renderBlocks`/`registry` in der Testdatei noch nicht importiert sind: `import { renderToStaticMarkup } from "react-dom/server";`, `import { renderBlocks } from "@editkraft/react";`, `import { registry } from "@/blocks/registry";` (Alias wie in den bestehenden Beispiel-Tests) ergänzen.
+- [ ] **Step 2: `test`-Script ergänzen** — in `apps/example/package.json` unter `scripts` einfügen: `"test": "vitest run",` (neben dem bestehenden `test:integration`).
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 3: Run test to verify it fails**
 
-Run: `pnpm --filter @editkraft/example test -- render.integration`
-Expected: FAIL (`body`-Feld/Marker fehlen). Falls der Paketname abweicht: `pnpm --filter ./apps/example test`.
+Run: `pnpm --filter @editkraft/example test`
+Expected: FAIL im neuen File (`data-ek-field`-Marker fehlen, `body` wird nicht gerendert). Der Integrationstest bleibt übersprungen.
 
-- [ ] **Step 3: Implement** — `apps/example/blocks/Hero.tsx` ersetzen:
+- [ ] **Step 4: Implement** — `apps/example/blocks/Hero.tsx` ersetzen:
 
 ```tsx
 import { sanitizeRichText, type EkImageValue, type EkLinkValue } from "@editkraft/schema";
@@ -929,11 +941,13 @@ export function Hero({
 }
 ```
 
-`apps/example/blocks/registry.ts` – Schema um `body` erweitern und `ekRichText` importieren:
+`apps/example/blocks/registry.ts` – Schema um `body` erweitern und `ekRichText` importieren. Import-Zeile ersetzen:
 
 ```ts
 import { defineBlock, ekText, ekRichText, ekImage, ekLink } from "@editkraft/schema";
 ```
+
+und das `schema`-Objekt der Hero-Definition ersetzen durch:
 
 ```ts
       schema: z.object({
@@ -944,15 +958,43 @@ import { defineBlock, ekText, ekRichText, ekImage, ekLink } from "@editkraft/sch
       }),
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 5: Integrationstest-Seed angleichen** — in `apps/example/tests/render.integration.test.tsx` den `content`-Seed (aktuell Hero `headline`/`subline` + `RichText`/`html`) ersetzen durch einen image-basierten Hero:
 
-Run: `pnpm --filter @editkraft/example test -- render.integration`
-Expected: PASS.
+```ts
+  const content = {
+    schemaVersion: "0.1.0",
+    blocks: [
+      { id: "b1", type: "Hero", props: {
+        headline: "Willkommen bei Editkraft",
+        body: "<b>Zwei</b> Blöcke",
+        image: { assetId: "", url: "" },
+      } },
+    ],
+  };
+```
 
-- [ ] **Step 5: Commit**
+und die Assertions des ersten `it` (Block-Anzahl + `data-block`) ersetzen durch:
+
+```ts
+    expect(page!.content.blocks).toHaveLength(1);
+
+    const html = renderToStaticMarkup(renderBlocks(page!.content.blocks, registry));
+    expect(html).toContain("Willkommen bei Editkraft");
+    expect(html).toContain('data-ek-field="headline"');
+    expect(html).toContain("<strong>Zwei</strong>");
+```
+
+> Der zweite `it` (Anon sieht Draft nicht) bleibt unverändert.
+
+- [ ] **Step 6: Run tests + typecheck**
+
+Run: `pnpm --filter @editkraft/example test && pnpm --filter @editkraft/example typecheck`
+Expected: `hero-fields` PASS; Integrationstest übersprungen (ohne Keys); Typecheck grün.
+
+- [ ] **Step 7: Commit**
 
 ```bash
-git add apps/example/blocks/Hero.tsx apps/example/blocks/registry.ts apps/example/tests/render.integration.test.tsx
+git add apps/example/blocks/Hero.tsx apps/example/blocks/registry.ts apps/example/package.json apps/example/tests/hero-fields.test.tsx apps/example/tests/render.integration.test.tsx
 git commit -m "feat(example): bind Hero fields with data-ek-field + sanitized richText body"
 ```
 
