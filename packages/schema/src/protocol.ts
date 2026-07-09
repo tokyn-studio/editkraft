@@ -7,8 +7,11 @@ import { pageContentSchema, type BlockFieldDescriptor } from "./block";
  * Studio-Seite implementiert das Nachbar-Repo.
  *
  * Richtung:
- *   preview → studio: ek:ready, ek:schema, ek:tree, ek:select (User klickt im Preview)
+ *   preview → studio: ek:ready, ek:schema, ek:tree, ek:select, ek:focus-field
+ *                     ek:update (Inline-Edit im Preview)
  *   studio → preview: ek:select (Selektion setzen), ek:update (Prop-Update)
+ *
+ * ek:select und ek:update sind bidirektional (beide Seiten senden/empfangen).
  *
  * Jede Nachricht trägt `channel: "editkraft"` und `v` (Protokollversion), damit
  * fremde postMessages sicher ignoriert werden. Zusätzlich MUSS der Empfänger die
@@ -34,7 +37,8 @@ export const ekSelectMessage = z.object({
   blockId: z.string(),
 });
 
-/** Studio setzt neue props für einen Block (Live-Vorschau). */
+/** Prop-Update für einen Block. Bidirektional: Studio setzt props (Live-Vorschau),
+ *  die Preview meldet Inline-Edits mit derselben Payload zurück. */
 export const ekUpdateMessage = z.object({
   ...base,
   type: z.literal("ek:update"),
@@ -79,12 +83,22 @@ export const ekSchemaMessage = z.object({
 });
 export type EkSchemaMessage = z.infer<typeof ekSchemaMessage>;
 
+/** Preview → Studio: Nutzer ist in ein Feld gegangen (Inline-Klick / Bild-Klick). */
+export const ekFocusFieldMessage = z.object({
+  ...base,
+  type: z.literal("ek:focus-field"),
+  blockId: z.string(),
+  fieldKey: z.string(),
+});
+export type EkFocusFieldMessage = z.infer<typeof ekFocusFieldMessage>;
+
 export const ekMessage = z.discriminatedUnion("type", [
   ekReadyMessage,
   ekSelectMessage,
   ekUpdateMessage,
   ekTreeMessage,
   ekSchemaMessage,
+  ekFocusFieldMessage,
 ]);
 
 export type EkReadyMessage = z.infer<typeof ekReadyMessage>;

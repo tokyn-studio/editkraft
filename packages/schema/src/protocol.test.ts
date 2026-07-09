@@ -6,6 +6,7 @@ import {
   createMessage,
   isAllowedOrigin,
   ekMessage,
+  ekFocusFieldMessage,
   type BlockSchemaDescriptor,
 } from "./protocol";
 
@@ -78,5 +79,28 @@ describe("ek:schema", () => {
   it("verlangt type/label/slots/fields je Block", () => {
     const bad = createMessage("ek:schema", { blocks: [{ type: "X" }] as never });
     expect(ekMessage.safeParse(bad).success).toBe(false);
+  });
+});
+
+describe("ek:focus-field", () => {
+  it("createMessage baut eine gültige focus-field-Nachricht", () => {
+    const msg = createMessage("ek:focus-field", { blockId: "b1", fieldKey: "headline" });
+    expect(msg).toEqual({
+      channel: "editkraft",
+      v: 1,
+      type: "ek:focus-field",
+      blockId: "b1",
+      fieldKey: "headline",
+    });
+  });
+
+  it("parseMessage akzeptiert focus-field und liefert die Felder typisiert", () => {
+    const parsed = parseMessage(createMessage("ek:focus-field", { blockId: "b2", fieldKey: "body" }));
+    expect(parsed?.type).toBe("ek:focus-field");
+    expect(parsed && parsed.type === "ek:focus-field" ? parsed.fieldKey : null).toBe("body");
+  });
+
+  it("das direkte Schema lehnt eine focus-field-Nachricht ohne fieldKey ab", () => {
+    expect(ekFocusFieldMessage.safeParse({ channel: "editkraft", v: 1, type: "ek:focus-field", blockId: "b1" }).success).toBe(false);
   });
 });
