@@ -244,6 +244,21 @@ export function EditkraftPreview({
     setTree((current) => updateBlockProps(current, f.blockId, { [f.fieldKey]: value }));
   };
 
+  const onClickCapture = (e: { target: EventTarget | null }) => {
+    const el = (e.target as HTMLElement | null)?.closest?.<HTMLElement>("[data-ek-field]");
+    if (!el) return;
+    const wrapper = el.closest<HTMLElement>("[data-editkraft-block-id]");
+    const blockId = wrapper?.getAttribute("data-editkraft-block-id") ?? null;
+    const fieldKey = el.getAttribute("data-ek-field") ?? null;
+    if (!blockId || !fieldKey) return;
+    const type = blockTypeOf(blockId);
+    const kind = type ? fieldKindOf(type, fieldKey) : undefined;
+    if (kind === "image") {
+      postToStudio(createMessage("ek:select", { blockId }), studioOrigin);
+      postToStudio(createMessage("ek:focus-field", { blockId, fieldKey }), studioOrigin);
+    }
+  };
+
   const onSelect = (id: string) => {
     setSelectedId(id);
     postToStudio(createMessage("ek:select", { blockId: id }), studioOrigin);
@@ -266,7 +281,7 @@ export function EditkraftPreview({
 
   return createElement(
     "div",
-    { ref: containerRef, onInput, onFocusCapture: onFocusIn, onBlurCapture: onFocusOut },
+    { ref: containerRef, onInput, onClickCapture, onFocusCapture: onFocusIn, onBlurCapture: onFocusOut },
     createElement(PreviewBlocks, { blocks: tree.blocks, registry, selectedId, onSelect }),
     toolbar
       ? createElement(

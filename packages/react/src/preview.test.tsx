@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { act } from "react";
 import { render, screen, fireEvent, cleanup, waitFor } from "@testing-library/react";
 import { z } from "zod";
-import { defineBlock, ekText, ekRichText, createMessage, type PageContent } from "@editkraft/schema";
+import { defineBlock, ekText, ekRichText, ekImage, createMessage, type PageContent } from "@editkraft/schema";
 import { createRegistry } from "./registry";
 import { EditkraftPreview } from "./preview";
 
@@ -17,10 +17,14 @@ function Text({ body }: { body: string }) {
 function Prose({ body }: { body: string }) {
   return <div data-ek-field="body" dangerouslySetInnerHTML={{ __html: body }} />;
 }
+function Banner({ image }: { image: { url?: string; alt?: string } }) {
+  return <div data-ek-field="image"><img src={image?.url ?? ""} alt={image?.alt ?? ""} /></div>;
+}
 const registry = createRegistry([
   { definition: defineBlock({ type: "Hero", label: "Hero", schema: z.object({ headline: ekText() }) }), component: Hero },
   { definition: defineBlock({ type: "Text", label: "Text", schema: z.object({ body: ekText() }) }), component: Text },
   { definition: defineBlock({ type: "Prose", label: "Prosa", schema: z.object({ body: ekRichText() }) }), component: Prose },
+  { definition: defineBlock({ type: "Banner", label: "Banner", schema: z.object({ image: ekImage() }) }), component: Banner },
 ]);
 
 const content: PageContent = {
@@ -29,6 +33,7 @@ const content: PageContent = {
     { id: "b1", type: "Hero", props: { headline: "Original" } },
     { id: "b2", type: "Text", props: { body: "Zweiter" } },
     { id: "b3", type: "Prose", props: { body: "<strong>fett</strong> normal" } },
+    { id: "b4", type: "Banner", props: { image: { assetId: "", url: "" } } },
   ],
 };
 
@@ -216,5 +221,23 @@ describe("RichText-Mini-Toolbar", () => {
     expect(upd?.blockId).toBe("b3");
     post.mockRestore();
     vi.useRealTimers();
+  });
+});
+
+describe("Bild-Feld", () => {
+  it("ist nicht contentEditable", () => {
+    const { container } = render(<EditkraftPreview content={content} registry={registry} studioOrigin={STUDIO} />);
+    expect(fieldEl(container, "b4", "image").getAttribute("contenteditable")).toBeNull();
+  });
+
+  it("Klick meldet ek:focus-field mit dem Bildfeld", () => {
+    const post = vi.spyOn(window.parent, "postMessage");
+    const { container } = render(<EditkraftPreview content={content} registry={registry} studioOrigin={STUDIO} />);
+    post.mockClear();
+    fireEvent.click(fieldEl(container, "b4", "image"));
+    const focus = post.mock.calls.map((c) => c[0] as { type: string; fieldKey?: string; blockId?: string }).find((x) => x.type === "ek:focus-field");
+    expect(focus?.blockId).toBe("b4");
+    expect(focus?.fieldKey).toBe("image");
+    post.mockRestore();
   });
 });
