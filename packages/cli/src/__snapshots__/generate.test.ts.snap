@@ -3,23 +3,23 @@
 exports[`generateFiles > Snapshot des generierten Inhalts ist stabil 1`] = `
 {
   ".env.editkraft.example": "# Editkraft
-# Supabase deines Projekts (Server-only Service-Key niemals mit NEXT_PUBLIC_ prefixen!)
+# Supabase for your project (never prefix the server-only service key with NEXT_PUBLIC_!)
 SUPABASE_URL=
 SUPABASE_SERVICE_ROLE_KEY=
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
-# Shared Secret für den Revalidate-Webhook
+# Shared secret for the revalidate webhook
 EDITKRAFT_REVALIDATE_SECRET=
-# Shared Secret für signierte Draft-Preview-Tokens (Studio ⇄ Kundenseite)
+# Shared secret for signed draft-preview tokens (Studio <-> customer site)
 EDITKRAFT_PREVIEW_SECRET=
-# Erlaubte Studio-Origin für die Preview-Bridge
+# Allowed Studio origin for the preview bridge
 NEXT_PUBLIC_EDITKRAFT_STUDIO_ORIGIN=https://studio.editkraft.dev
 ",
   "app/api/editkraft/revalidate/route.ts": "import { createRevalidateHandler } from "@editkraft/react";
 
 /**
- * Revalidate-Endpoint. Wird per Supabase-Webhook beim Publish aufgerufen und
- * mit einem Shared Secret abgesichert (EDITKRAFT_REVALIDATE_SECRET).
+ * Revalidate endpoint. Called by a Supabase webhook on publish and
+ * secured with a shared secret (EDITKRAFT_REVALIDATE_SECRET).
  */
 export const POST = createRevalidateHandler({
   secret: process.env.EDITKRAFT_REVALIDATE_SECRET,
@@ -32,10 +32,10 @@ import { verifyDraftToken } from "@editkraft/schema";
 import { PreviewClient } from "../preview-client";
 
 /**
- * Preview-Route für das Studio. Zugriff über ein signiertes, kurzlebiges
- * Draft-Token (?token=…) statt Draft-Mode-Cookie – funktioniert damit auch im
- * Cross-Origin-iframe. Lädt Draft-Content serverseitig (Service-Key) und
- * übergibt nur den serialisierbaren Content an den Client-Wrapper.
+ * Preview route for the Studio. Accessed via a signed, short-lived
+ * draft token (?token=…) instead of the Draft Mode cookie — this also works
+ * in a cross-origin iframe. Loads draft content server-side (service key)
+ * and passes only serializable content to the client wrapper.
  */
 export default async function EditkraftPreviewPage({
   params,
@@ -73,9 +73,9 @@ import { EditkraftPreview } from "@editkraft/react/preview";
 import { registry } from "@/blocks/registry";
 
 /**
- * Client-Wrapper: importiert die Registry (mit Komponenten) client-seitig, damit
- * keine Funktionen über die Server→Client-Grenze gereicht werden. Der Server
- * übergibt nur den serialisierbaren Draft-Content.
+ * Client wrapper: imports the registry (with components) on the client side so
+ * no functions cross the server→client boundary. The server
+ * passes only serializable draft content.
  */
 export function PreviewClient({
   content,
@@ -90,8 +90,8 @@ export function PreviewClient({
   "blocks/Hero.tsx": "import type { EkImageValue, EkLinkValue } from "@editkraft/schema";
 
 /**
- * Beispiel-Block. Passe Markup und Styling an dein Design an – die Props kommen
- * validiert aus der Block-Definition in blocks/registry.ts.
+ * Example block. Adjust markup and styling to your design — props come
+ * validated from the block definition in blocks/registry.ts.
  */
 export function Hero({
   headline,
@@ -117,17 +117,17 @@ import { z } from "zod";
 import { Hero } from "./Hero";
 
 /**
- * Block-Registry: paart jede Block-Definition mit ihrer React-Komponente.
- * createRegistry validiert, dass jeder Typ Definition UND Komponente hat.
+ * Block registry: pairs each block definition with its React component.
+ * createRegistry validates that every type has both a definition AND a component.
  */
 export const registry = createRegistry([
   {
     definition: defineBlock({
       type: "Hero",
-      label: "Hero-Bereich",
+      label: "Hero section",
       schema: z.object({
-        headline: ekText({ label: "Überschrift" }),
-        image: ekImage({ label: "Bild" }),
+        headline: ekText({ label: "Headline" }),
+        image: ekImage({ label: "Image" }),
         cta: ekLink({ label: "Button" }).optional(),
       }),
     }),
@@ -138,20 +138,20 @@ export const registry = createRegistry([
   "editkraft.config.ts": "import type { EditkraftConfig } from "@editkraft/react";
 
 /**
- * Editkraft-Konfiguration deines Projekts.
- * Die erlaubte Studio-Origin kommt aus der ENV (kein Hardcoding von Secrets).
+ * Editkraft configuration for your project.
+ * The allowed Studio origin comes from ENV (no hardcoding secrets).
  */
 export default {
-  // Pfad zur Block-Registry (siehe blocks/registry.ts)
+  // Path to the block registry (see blocks/registry.ts)
   registry: "./blocks/registry",
-  // Erlaubte Origin des Studios für die Preview-Bridge (postMessage-Origin-Check)
+  // Allowed Studio origin for the preview bridge (postMessage origin check)
   studioOrigin: process.env.NEXT_PUBLIC_EDITKRAFT_STUDIO_ORIGIN ?? "",
 } satisfies EditkraftConfig;
 ",
-  "supabase/migrations/20260101000000_editkraft_init.sql": "-- Editkraft: Content-Tabellen im Kundenprojekt (Prefix ek_).
--- Erzeugt von: editkraft init
+  "supabase/migrations/20260101000000_editkraft_init.sql": "-- Editkraft: content tables in the customer project (prefix ek_).
+-- Generated by: editkraft init
 
--- Status-Enum (idempotent)
+-- Status enum (idempotent)
 do $$
 begin
   if not exists (select 1 from pg_type where typname = 'ek_page_status') then
@@ -159,7 +159,7 @@ begin
   end if;
 end $$;
 
--- updated_at-Trigger-Funktion
+-- updated_at trigger function
 create or replace function public.ek_set_updated_at()
 returns trigger
 language plpgsql
@@ -190,7 +190,7 @@ create trigger ek_pages_set_updated_at before update on public.ek_pages
   for each row execute function public.ek_set_updated_at();
 
 -- ---------------------------------------------------------------------------
--- ek_page_versions (append-only; jede Speicherung ist eine neue Version)
+-- ek_page_versions (append-only; every save is a new version)
 -- ---------------------------------------------------------------------------
 create table if not exists public.ek_page_versions (
   id uuid primary key default gen_random_uuid(),
@@ -204,7 +204,7 @@ create table if not exists public.ek_page_versions (
 create index if not exists ek_page_versions_page_id_idx
   on public.ek_page_versions (page_id);
 
--- FK erst nach ek_page_versions setzbar (published_version_id -> version)
+-- FK can only be set after ek_page_versions exists (published_version_id -> version)
 do $$
 begin
   if not exists (
@@ -231,15 +231,15 @@ create table if not exists public.ek_assets (
 );
 
 -- ---------------------------------------------------------------------------
--- Storage-Bucket für Assets (public: veröffentlichte Bilder sind öffentlich)
+-- Storage bucket for assets (public: published images are public)
 -- ---------------------------------------------------------------------------
 insert into storage.buckets (id, name, public)
 values ('ek-assets', 'ek-assets', true)
 on conflict (id) do nothing;
 
 -- ---------------------------------------------------------------------------
--- RLS: anon/authenticated lesen NUR published Content.
--- Schreiben & Draft-Reads laufen über service_role (umgeht RLS).
+-- RLS: anon/authenticated can read ONLY published content.
+-- Writes & draft reads go through service_role (bypasses RLS).
 -- ---------------------------------------------------------------------------
 alter table public.ek_pages enable row level security;
 alter table public.ek_page_versions enable row level security;
@@ -249,8 +249,8 @@ grant select on public.ek_pages to anon, authenticated;
 grant select on public.ek_page_versions to anon, authenticated;
 grant select on public.ek_assets to anon, authenticated;
 
--- service_role: voller Zugriff (Studio & Draft Mode schreiben serverseitig).
--- service_role umgeht RLS zusätzlich (BYPASSRLS).
+-- service_role: full access (Studio & Draft Mode write server-side).
+-- service_role also bypasses RLS (BYPASSRLS).
 grant all on public.ek_pages to service_role;
 grant all on public.ek_page_versions to service_role;
 grant all on public.ek_assets to service_role;

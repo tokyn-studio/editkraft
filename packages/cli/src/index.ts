@@ -2,20 +2,20 @@ import pc from "picocolors";
 import { init } from "./commands/init";
 import { doctor } from "./commands/doctor";
 
-const HELP = `${pc.bold("editkraft")} – visuelles CMS für Next.js + Supabase
+const HELP = `${pc.bold("editkraft")} – visual CMS for Next.js + Supabase
 
-${pc.bold("Verwendung:")}
-  npx editkraft <command> [optionen]
+${pc.bold("Usage:")}
+  npx editkraft <command> [options]
 
 ${pc.bold("Commands:")}
-  init      Richtet Editkraft im aktuellen Projekt ein (Migration, Config, Registry, Routen)
-  doctor    Prüft Migrationstand, ENV und Registry-Konsistenz
+  init      Sets up Editkraft in the current project (migration, config, registry, routes)
+  doctor    Checks migration state, ENV, and registry consistency
 
-${pc.bold("Optionen:")}
-  --yes, -y     Nicht-interaktiv (nimmt Defaults an)
-  --force       Vorhandene Dateien überschreiben
-  --cwd <dir>   Zielverzeichnis (Default: aktuelles)
-  --help, -h    Diese Hilfe
+${pc.bold("Options:")}
+  --yes, -y     Non-interactive (accepts defaults)
+  --force       Overwrite existing files
+  --cwd <dir>   Target directory (default: current)
+  --help, -h    Show this help
 `;
 
 function parseArgs(argv: string[]) {
@@ -49,7 +49,7 @@ export async function run(argv: string[]): Promise<number> {
     case "doctor":
       return doctor({ cwd: args.cwd });
     default:
-      process.stderr.write(pc.red(`Unbekannter Command: ${args.command}\n\n`) + HELP);
+      process.stderr.write(pc.red(`Unknown command: ${args.command}\n\n`) + HELP);
       return 1;
   }
 }
@@ -59,7 +59,7 @@ run(process.argv).then(
     process.exitCode = code;
   },
   (err) => {
-    process.stderr.write(pc.red(`Fehler: ${err instanceof Error ? err.message : String(err)}\n`));
+    process.stderr.write(pc.red(`Error: ${err instanceof Error ? err.message : String(err)}\n`));
     process.exitCode = 1;
   },
 );

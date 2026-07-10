@@ -5,7 +5,7 @@ import pc from "picocolors";
 import { detectProject, applyFiles } from "../fs";
 import { generateFiles } from "../generate";
 
-/** Zeitstempel einer bereits vorhandenen Editkraft-Migration (für Idempotenz). */
+/** Timestamp of an already-existing Editkraft migration (for idempotency). */
 function existingMigrationTimestamp(root: string): string | null {
   const dir = join(root, "supabase", "migrations");
   if (!existsSync(dir)) return null;
@@ -17,7 +17,7 @@ export interface InitOptions {
   cwd: string;
   yes: boolean;
   force: boolean;
-  /** Injizierbar für Tests; sonst aus der aktuellen Zeit. */
+  /** Injectable for tests; otherwise derived from the current time. */
   timestamp?: string;
 }
 
@@ -30,7 +30,7 @@ function defaultTimestamp(): string {
   );
 }
 
-/** `editkraft init` – interaktive Einrichtung; idempotent. */
+/** `editkraft init` — interactive setup; idempotent. */
 export async function init(options: InitOptions): Promise<number> {
   p.intro(pc.bgCyan(pc.black(" editkraft init ")));
 
@@ -38,16 +38,16 @@ export async function init(options: InitOptions): Promise<number> {
 
   if (!project.isNext || !project.isAppRouter) {
     const msg =
-      "Kein Next.js-App-Router-Projekt erkannt (kein app/ bzw. src/app/ und kein next in package.json).";
+      "No Next.js App Router project detected (no app/ or src/app/, and no next in package.json).";
     if (options.yes) {
-      p.log.warn(msg + " Fahre trotzdem fort (--yes).");
+      p.log.warn(msg + " Continuing anyway (--yes).");
     } else {
       const proceed = await p.confirm({
-        message: msg + " Trotzdem fortfahren?",
+        message: msg + " Continue anyway?",
         initialValue: false,
       });
       if (p.isCancel(proceed) || !proceed) {
-        p.cancel("Abgebrochen.");
+        p.cancel("Cancelled.");
         return 1;
       }
     }
@@ -55,12 +55,12 @@ export async function init(options: InitOptions): Promise<number> {
 
   if (!project.hasSupabase) {
     p.log.warn(
-      "Kein Supabase-Setup gefunden. Die Migration wird trotzdem unter " +
-        "supabase/migrations abgelegt; richte die Supabase-CLI danach ein.",
+      "No Supabase setup found. The migration will be written to " +
+        "supabase/migrations anyway; set up the Supabase CLI afterwards.",
     );
   }
 
-  // Vorhandene Migration wiederverwenden, damit ein erneuter Lauf keine zweite anlegt.
+  // Reuse an existing migration so a repeat run doesn't create a second one.
   const timestamp =
     options.timestamp ?? existingMigrationTimestamp(project.root) ?? defaultTimestamp();
   const specs = generateFiles({ srcDir: project.srcDir, timestamp });
@@ -69,35 +69,35 @@ export async function init(options: InitOptions): Promise<number> {
   for (const r of results) {
     const label =
       r.outcome === "created"
-        ? pc.green("erstellt ")
+        ? pc.green("created")
         : r.outcome === "identical"
-          ? pc.dim("identisch")
-          : pc.yellow("übersprungen");
+          ? pc.dim("identical")
+          : pc.yellow("skipped");
     p.log.message(`${label}  ${r.path}`);
   }
 
   const skipped = results.filter((r) => r.outcome === "skipped");
   if (skipped.length > 0 && !options.force) {
     p.log.info(
-      `${skipped.length} vorhandene Datei(en) unverändert gelassen. ` +
-        "Mit --force überschreiben.",
+      `${skipped.length} existing file(s) left unchanged. ` +
+        "Overwrite with --force.",
     );
   }
 
   const migration = specs.find((s) => s.path.includes("migrations"))!.path;
   p.note(
     [
-      `1. Migration ausführen:  ${pc.cyan("supabase db push")}  (oder in supabase/migrations committen)`,
+      `1. Run the migration:  ${pc.cyan("supabase db push")}  (or commit it in supabase/migrations)`,
       `   → ${migration}`,
-      `2. ENV setzen (siehe ${pc.cyan(".env.editkraft.example")}):`,
+      `2. Set ENV (see ${pc.cyan(".env.editkraft.example")}):`,
       "   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, EDITKRAFT_REVALIDATE_SECRET,",
       "   NEXT_PUBLIC_EDITKRAFT_STUDIO_ORIGIN",
-      `3. ${pc.cyan("@editkraft/react @editkraft/schema zod")} installieren und Blöcke in blocks/registry.ts ergänzen`,
-      `4. Prüfen mit  ${pc.cyan("npx editkraft doctor")}`,
+      `3. Install ${pc.cyan("@editkraft/react @editkraft/schema zod")} and add blocks in blocks/registry.ts`,
+      `4. Check with  ${pc.cyan("npx editkraft doctor")}`,
     ].join("\n"),
-    "Nächste Schritte",
+    "Next steps",
   );
 
-  p.outro(pc.green("Editkraft ist eingerichtet."));
+  p.outro(pc.green("Editkraft is set up."));
   return 0;
 }

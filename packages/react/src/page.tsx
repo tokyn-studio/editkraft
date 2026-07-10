@@ -9,19 +9,19 @@ export interface EditkraftPageProps {
   supabase: SupabaseClient;
   slug: string;
   registry: Registry;
-  /** Dev-Platzhalter für unbekannte/ungültige Blöcke (Default: NODE_ENV). */
+  /** Dev placeholder for unknown/invalid blocks (default: NODE_ENV). */
   dev?: boolean;
   supportedSchemaRange?: string;
-  /** Fallback, wenn keine published Seite existiert (statt Fehler zu werfen). */
+  /** Fallback used when no published page exists (instead of throwing). */
   notFound?: ReactNode;
 }
 
 /**
- * Server Component: lädt die published Seite aus der Kunden-Supabase und rendert
- * den Blocktree über die Registry. Bei inkompatibler schemaVersion wirft der
- * Datenlader EditkraftSchemaError (klare Anleitung, kein stiller Crash).
+ * Server Component: loads the published page from the customer's Supabase and
+ * renders the block tree via the registry. On an incompatible schemaVersion,
+ * the data loader throws EditkraftSchemaError (clear guidance, no silent crash).
  *
- * Verwendung (im Kundenprojekt, App Router):
+ * Usage (in the customer project, App Router):
  *   export default async function Page({ params }) {
  *     const supabase = createServerClient(...)
  *     return <EditkraftPage supabase={supabase} slug={(await params).slug} registry={registry} />
@@ -36,7 +36,7 @@ export async function EditkraftPage(props: EditkraftPageProps): Promise<ReactNod
     if (props.notFound !== undefined) return props.notFound;
     throw new EditkraftError(
       "PAGE_NOT_FOUND",
-      `Keine veröffentlichte Seite mit slug "${props.slug}" gefunden.`,
+      `No published page found for slug "${props.slug}".`,
     );
   }
 

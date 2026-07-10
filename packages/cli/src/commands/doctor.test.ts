@@ -22,8 +22,8 @@ describe("runDoctorChecks", () => {
   it("meldet fehlende Einrichtung auf leerem Projekt", () => {
     const checks = runDoctorChecks(dir);
     expect(status(checks, "editkraft.config.ts")).toBe("fail");
-    expect(status(checks, "Migration")).toBe("fail");
-    expect(status(checks, "Registry")).toBe("fail");
+    expect(status(checks, "migration")).toBe("fail");
+    expect(status(checks, "registry")).toBe("fail");
   });
 
   it("ist grün nach init (Config/Registry/Migration vorhanden)", () => {
@@ -33,8 +33,8 @@ describe("runDoctorChecks", () => {
 
     const checks = runDoctorChecks(dir);
     expect(status(checks, "editkraft.config.ts")).toBe("ok");
-    expect(status(checks, "Registry")).toBe("ok");
-    expect(status(checks, "Migration")).toBe("ok");
+    expect(status(checks, "registry")).toBe("ok");
+    expect(status(checks, "migration")).toBe("ok");
     expect(status(checks, "App Router")).toBe("ok");
   });
 

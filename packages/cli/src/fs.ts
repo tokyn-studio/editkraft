@@ -18,7 +18,7 @@ function readJsonSafe(path: string): Record<string, unknown> | null {
   }
 }
 
-/** Erkennt Next.js (App Router), src/-Layout und Supabase-CLI im Projekt. */
+/** Detects Next.js (App Router), a src/ layout, and the Supabase CLI in the project. */
 export function detectProject(root: string): ProjectInfo {
   const abs = resolve(root);
   const pkg = readJsonSafe(join(abs, "package.json"));
@@ -46,8 +46,8 @@ export interface ApplyResult {
 }
 
 /**
- * Schreibt die Dateien idempotent. Vorhandene Dateien werden NICHT überschrieben
- * (outcome "skipped"), außer `force` ist gesetzt. Identischer Inhalt → "identical".
+ * Writes the files idempotently. Existing files are NOT overwritten
+ * (outcome "skipped"), unless `force` is set. Identical content → "identical".
  */
 export function applyFiles(
   root: string,

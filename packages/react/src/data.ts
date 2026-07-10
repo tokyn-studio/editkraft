@@ -16,25 +16,26 @@ export interface PublishedPage {
   content: PageContent;
 }
 
-/** Vom Renderer unterstützte schemaVersion-Range: gleiche Major wie das installierte Schema. */
+/** schemaVersion range supported by the renderer: same major as the installed schema. */
 export function defaultSupportedRange(): string {
   const major = majorOf(SCHEMA_VERSION);
   return `>=${major}.0.0 <${major + 1}.0.0`;
 }
 
 export interface LoadOptions {
-  /** Override der unterstützten schemaVersion-Range (Default: gleiche Major). */
+  /** Override for the supported schemaVersion range (default: same major). */
   supportedSchemaRange?: string;
 }
 
 /**
- * Lädt die published Seite samt published Version aus der Kunden-Supabase.
- * Nutzt den übergebenen Client (Kundenprojekt); über RLS ist nur published
- * Content lesbar. Gibt null zurück, wenn keine published Seite existiert.
+ * Loads the published page together with the published version from the
+ * customer's Supabase. Uses the given client (customer project); RLS only
+ * allows published content to be read. Returns null if no published page
+ * exists.
  *
- * Wirft:
- *  - EditkraftSchemaError bei inkompatibler schemaVersion (klare Anleitung),
- *  - EditkraftError CONTENT_INVALID bei kaputtem Blocktree.
+ * Throws:
+ *  - EditkraftSchemaError on incompatible schemaVersion (clear guidance),
+ *  - EditkraftError CONTENT_INVALID on a broken block tree.
  */
 export async function loadPublishedPage(
   supabase: SupabaseClient,
@@ -51,7 +52,7 @@ export async function loadPublishedPage(
   if (error) {
     throw new EditkraftError(
       "CONTENT_INVALID",
-      `Fehler beim Laden der Seite "${slug}": ${error.message}`,
+      `Error loading page "${slug}": ${error.message}`,
     );
   }
   if (!page || !page.published_version_id) return null;
@@ -74,7 +75,7 @@ export async function loadPublishedPage(
   if (!parsed.success) {
     throw new EditkraftError(
       "CONTENT_INVALID",
-      `Blocktree der Seite "${slug}" ist ungültig: ${parsed.error.issues
+      `Block tree for page "${slug}" is invalid: ${parsed.error.issues
         .map((i) => `${i.path.join(".")} ${i.message}`)
         .join(", ")}`,
     );
@@ -88,16 +89,16 @@ export async function loadPublishedPage(
   };
 }
 
-/** ISR-Cache-Tag einer Seite. Der Revalidate-Handler invalidiert genau diesen Tag. */
+/** ISR cache tag for a page. The revalidate handler invalidates exactly this tag. */
 export function pageTag(slug: string): string {
   return `editkraft:page:${slug}`;
 }
 
 /**
- * Lädt den DRAFT-Content einer Seite (neueste Version, unabhängig vom Publish).
- * Nur für den Draft Mode – der übergebene Client MUSS ein Server-Client mit
- * service_role sein (Draft-Reads sind über RLS gesperrt). Niemals im Browser
- * mit Service-Key verwenden.
+ * Loads the DRAFT content of a page (latest version, independent of publish
+ * state). For Draft Mode only — the given client MUST be a server client
+ * with service_role (draft reads are blocked by RLS). Never use the
+ * service key in the browser.
  */
 export async function loadDraftContent(
   supabase: SupabaseClient,
@@ -123,7 +124,7 @@ export async function loadDraftContent(
   if (!parsed.success) {
     throw new EditkraftError(
       "CONTENT_INVALID",
-      `Draft-Blocktree der Seite "${slug}" ist ungültig.`,
+      `Draft block tree for page "${slug}" is invalid.`,
     );
   }
 

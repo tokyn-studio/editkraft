@@ -10,21 +10,21 @@ import {
 } from "./templates/project";
 
 export interface FileSpec {
-  /** Pfad relativ zur Projektwurzel. */
+  /** Path relative to the project root. */
   path: string;
   content: string;
 }
 
 export interface GenerateOptions {
-  /** Projekt nutzt ein src/-Verzeichnis (src/app statt app). */
+  /** Project uses a src/ directory (src/app instead of app). */
   srcDir: boolean;
-  /** Zeitstempel für den Migrationsdateinamen (für Tests injizierbar). */
+  /** Timestamp for the migration filename (injectable for tests). */
   timestamp: string;
 }
 
 /**
- * Erzeugt alle Dateien, die `editkraft init` schreibt – rein und ohne
- * Seiteneffekte, damit sie snapshot-getestet werden können.
+ * Generates all the files that `editkraft init` writes — pure and free of
+ * side effects, so they can be snapshot-tested.
  */
 export function generateFiles(options: GenerateOptions): FileSpec[] {
   const base = options.srcDir ? "src/" : "";

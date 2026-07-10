@@ -20,7 +20,7 @@ const REQUIRED_ENV = [
   "EDITKRAFT_PREVIEW_SECRET",
 ];
 
-/** Liest gesetzte ENV-Keys aus process.env und .env*-Dateien im Projekt. */
+/** Reads set ENV keys from process.env and .env* files in the project. */
 function knownEnvKeys(root: string): Set<string> {
   const keys = new Set(Object.keys(process.env).filter((k) => process.env[k]));
   for (const file of [".env.local", ".env"]) {
@@ -34,23 +34,23 @@ function knownEnvKeys(root: string): Set<string> {
   return keys;
 }
 
-/** Reine Prüf-Logik (testbar): Registry, Migration, ENV. */
+/** Pure check logic (testable): registry, migration, ENV. */
 export function runDoctorChecks(root: string): Check[] {
   const abs = resolve(root);
   const project = detectProject(abs);
   const checks: Check[] = [];
 
   checks.push({
-    label: "Next.js App Router erkannt",
+    label: "Next.js App Router detected",
     status: project.isNext && project.isAppRouter ? "ok" : "warn",
-    hint: "Editkraft unterstützt aktuell nur den App Router.",
+    hint: "Editkraft currently only supports the App Router.",
   });
 
   const configExists = existsSync(join(abs, "editkraft.config.ts"));
   checks.push({
-    label: "editkraft.config.ts vorhanden",
+    label: "editkraft.config.ts present",
     status: configExists ? "ok" : "fail",
-    hint: configExists ? undefined : "Führe `editkraft init` aus.",
+    hint: configExists ? undefined : "Run `editkraft init`.",
   });
 
   const base = project.srcDir ? join(abs, "src") : abs;
@@ -59,9 +59,9 @@ export function runDoctorChecks(root: string): Check[] {
     existsSync(registryPath) &&
     readFileSync(registryPath, "utf8").includes("createRegistry");
   checks.push({
-    label: "Block-Registry konsistent",
+    label: "Block registry consistent",
     status: registryOk ? "ok" : "fail",
-    hint: registryOk ? undefined : "blocks/registry.ts fehlt oder nutzt kein createRegistry().",
+    hint: registryOk ? undefined : "blocks/registry.ts is missing or does not use createRegistry().",
   });
 
   const migrationsDir = join(abs, "supabase", "migrations");
@@ -69,23 +69,23 @@ export function runDoctorChecks(root: string): Check[] {
     existsSync(migrationsDir) &&
     readdirSync(migrationsDir).some((f) => f.endsWith("_editkraft_init.sql"));
   checks.push({
-    label: "Editkraft-Migration vorhanden",
+    label: "Editkraft migration present",
     status: hasMigration ? "ok" : "fail",
-    hint: hasMigration ? undefined : "Migration fehlt – `editkraft init` erneut ausführen.",
+    hint: hasMigration ? undefined : "Migration missing — run `editkraft init` again.",
   });
 
   const env = knownEnvKeys(abs);
   const missing = REQUIRED_ENV.filter((k) => !env.has(k));
   checks.push({
-    label: "ENV-Variablen gesetzt",
+    label: "ENV variables set",
     status: missing.length === 0 ? "ok" : "warn",
-    hint: missing.length === 0 ? undefined : `Fehlt: ${missing.join(", ")}`,
+    hint: missing.length === 0 ? undefined : `Missing: ${missing.join(", ")}`,
   });
 
   return checks;
 }
 
-/** `editkraft doctor` – gibt die Prüfungen aus, Exit-Code 1 bei einem fail. */
+/** `editkraft doctor` — prints the checks, exit code 1 on any fail. */
 export async function doctor(options: { cwd: string }): Promise<number> {
   p.intro(pc.bgCyan(pc.black(" editkraft doctor ")));
   const checks = runDoctorChecks(options.cwd);
@@ -98,9 +98,9 @@ export async function doctor(options: { cwd: string }): Promise<number> {
 
   const failed = checks.some((c) => c.status === "fail");
   if (failed) {
-    p.outro(pc.red("Es gibt offene Punkte."));
+    p.outro(pc.red("There are open issues."));
     return 1;
   }
-  p.outro(pc.green("Alles bereit."));
+  p.outro(pc.green("All set."));
   return 0;
 }

@@ -1,30 +1,30 @@
 # Editkraft
 
-Open-Source-Bausteine für **Editkraft**, ein visuelles CMS für Next.js-Websites auf
-Vercel mit Supabase. Dieses Repo enthält alles, was **im Kundenprojekt** lebt –
-der Lese-Pfad (Kunden-Supabase → Renderer → Website) hat keine Abhängigkeit zur
-Editkraft-Infrastruktur. Content gehört dem Kunden.
+Open-source building blocks for **Editkraft**, a visual CMS for Next.js sites on
+Vercel with Supabase. This repo contains everything that lives **in the customer
+project** — the read path (customer Supabase → renderer → website) has no
+dependency on Editkraft infrastructure. Content belongs to the customer.
 
-## Pakete
+## Packages
 
-| Paket | npm | Zweck |
+| Package | npm | Purpose |
 | --- | --- | --- |
-| `packages/schema` | `@editkraft/schema` | Blocktree-Format, Feld-Primitives, Zod-Schemas – der Contract |
-| `packages/react` | `@editkraft/react` | Renderer (`EditkraftPage`, `createRegistry`, `renderBlocks`), Revalidate-Handler, Preview-Bridge (`@editkraft/react/preview`) |
+| `packages/schema` | `@editkraft/schema` | Block tree format, field primitives, Zod schemas — the contract |
+| `packages/react` | `@editkraft/react` | Renderer (`EditkraftPage`, `createRegistry`, `renderBlocks`), revalidate handler, preview bridge (`@editkraft/react/preview`) |
 | `packages/cli` | `editkraft` | `npx editkraft init` / `doctor` |
 
-## Kundenprojekt einrichten
+## Set up a customer project
 
 ```bash
-npx editkraft init      # Migration, editkraft.config.ts, blocks/registry.ts, Preview- & Revalidate-Route
-npx editkraft doctor    # prüft Migrationstand, ENV und Registry-Konsistenz
+npx editkraft init      # migration, editkraft.config.ts, blocks/registry.ts, preview & revalidate route
+npx editkraft doctor    # checks migration state, ENV, and registry consistency
 ```
 
-`init` ist idempotent (überschreibt nichts ohne `--force`) und legt eine
-SQL-Migration mit published-only-RLS an. Die RLS-Garantie („anon liest nur
-published") ist als SQL-Fixture getestet: `packages/cli/test/rls.fixture.sql`.
+`init` is idempotent (overwrites nothing without `--force`) and creates an
+SQL migration with published-only RLS. The RLS guarantee ("anon only reads
+published content") is tested as a SQL fixture: `packages/cli/test/rls.fixture.sql`.
 
-## Entwicklung
+## Development
 
 ```bash
 pnpm install
@@ -33,9 +33,9 @@ pnpm test       # Vitest
 pnpm typecheck
 ```
 
-Contract-Details: [`docs/CONTRACT.md`](docs/CONTRACT.md) ·
-Entscheidungen: [`docs/DECISIONS.md`](docs/DECISIONS.md).
+Contract details: [`docs/CONTRACT.md`](docs/CONTRACT.md) ·
+Decisions: [`docs/DECISIONS.md`](docs/DECISIONS.md).
 
-## Lizenz
+## License
 
 MIT
