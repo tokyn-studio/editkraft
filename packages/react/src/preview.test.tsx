@@ -265,4 +265,31 @@ describe("Bild-Feld", () => {
 
     post.mockRestore();
   });
+
+  it("Klick auf 'Library' im Bild-Popover meldet genau ein ek:library-open mit blockId/fieldKey", () => {
+    const post = vi.spyOn(window.parent, "postMessage");
+    const { container } = render(<EditkraftPreview content={content} registry={registry} studioOrigin={STUDIO} />);
+    fireEvent.click(fieldEl(container, "b4", "image"));
+    post.mockClear();
+
+    const buttons = Array.from(
+      container.querySelectorAll<HTMLButtonElement>("[data-editkraft-image-popover] button"),
+    );
+    const libraryButton = buttons.find((b) => b.textContent?.includes("Library"));
+    expect(libraryButton).toBeTruthy();
+    fireEvent.click(libraryButton!);
+
+    const messages = post.mock.calls.map(
+      (c) => c[0] as { channel?: string; type: string; blockId?: string; fieldKey?: string },
+    );
+    const libraryMessages = messages.filter((m) => m.type === "ek:library-open");
+
+    expect(libraryMessages.length).toBe(1);
+    expect(libraryMessages[0]?.channel).toBe("editkraft");
+    expect(libraryMessages[0]?.blockId).toBe("b4");
+    expect(libraryMessages[0]?.fieldKey).toBe("image");
+    expect(post.mock.calls[0]![1]).toBe(STUDIO);
+
+    post.mockRestore();
+  });
 });

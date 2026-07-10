@@ -735,6 +735,18 @@ export function EditkraftPreview({
     closeImagePopover();
   };
 
+  // Asset-Library im Studio öffnen (Raw-Nachricht wie ek:ai-edit-open – die
+  // Library selbst (Speicher, Auswahl) lebt serverseitig im Studio, nie hier).
+  const openLibrary = (blockId: string, fieldKey: string) => {
+    if (typeof window !== "undefined") {
+      window.parent.postMessage(
+        { channel: "editkraft", type: "ek:library-open", blockId, fieldKey },
+        studioOrigin,
+      );
+    }
+    closeImagePopover();
+  };
+
   // --- Zuschneiden (1:1-Framing) --------------------------------------------
   const clampPct = (n: number) => Math.max(0, Math.min(100, n));
 
@@ -840,6 +852,24 @@ export function EditkraftPreview({
     }),
     createElement("path", { d: "M20 3v4" }),
     createElement("path", { d: "M22 5h-4" }),
+  );
+
+  const libraryIcon: ReactNode = createElement(
+    "svg",
+    {
+      width: 15,
+      height: 15,
+      viewBox: "0 0 24 24",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: 2,
+      strokeLinecap: "round",
+      strokeLinejoin: "round",
+    },
+    createElement("path", { d: "m16 6 4 14" }),
+    createElement("path", { d: "M12 6v14" }),
+    createElement("path", { d: "M8 8v12" }),
+    createElement("path", { d: "M4 4v16" }),
   );
 
   // Kompakter Aktions-Button für das Bild-Popover (Zuschneiden / KI-Editor).
@@ -1135,13 +1165,14 @@ export function EditkraftPreview({
           fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif",
         },
       },
-      // Aktionen: Zuschneiden (nur mit vorhandenem Bild) + KI-Editor (immer).
+      // Aktionen: Zuschneiden (nur mit vorhandenem Bild) + Library + KI-Editor (immer).
       createElement(
         "div",
         { style: { display: "flex", gap: 6 } },
         (findBlockById(ip.blockId)?.props?.[ip.fieldKey] as { url?: string } | undefined)?.url
           ? imgActionButton(cropIcon, "Crop", () => openCrop(ip.blockId, ip.fieldKey))
           : null,
+        imgActionButton(libraryIcon, "Library", () => openLibrary(ip.blockId, ip.fieldKey)),
         imgActionButton(sparkleIcon, "AI Editor", () => openAiEditor(ip.blockId, ip.fieldKey), true),
       ),
       createElement(
