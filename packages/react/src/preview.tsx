@@ -401,6 +401,7 @@ export function EditkraftPreview({
       e.stopPropagation();
       setSelectedId(blockId);
       postToStudio(createMessage("ek:select", { blockId }), studioOrigin);
+      postToStudio(createMessage("ek:focus-field", { blockId, fieldKey }), studioOrigin);
       const imgEl = (el.querySelector?.<HTMLElement>("img") as HTMLElement | null) ?? el;
       openImagePopover(blockId, fieldKey, imgEl);
     }
@@ -431,6 +432,15 @@ export function EditkraftPreview({
       const on = el.getAttribute("data-editkraft-block-id") === selectedId;
       el.style.outline = on ? "2px solid #F5A623" : "";
       el.style.outlineOffset = on ? "2px" : "";
+      // Weiterhin als Attribut spiegeln (stabiler Hook für Tests/Tooling), aber
+      // imperativ statt über React-Props gesetzt – siehe Kommentar in PreviewBlocks:
+      // ein prop-getriebenes Attribut würde bei jeder Auswahländerung den ganzen
+      // Block (inkl. contentEditable-Feld) neu rendern und Cursor/Selektion zerstören.
+      if (on) {
+        el.setAttribute("data-editkraft-selected", "true");
+      } else {
+        el.removeAttribute("data-editkraft-selected");
+      }
     }
   }, [selectedId, tree.blocks]);
 
