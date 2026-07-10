@@ -61,14 +61,58 @@ export function isEkField(schema: z.ZodTypeAny): boolean {
 
 // --- Wert-Schemas der komplexen Primitives (Teil des Contracts) --------------
 
+/**
+ * Non-destruktiver 1:1-Rahmen: `x`/`y` = Fokuspunkt in Prozent (object-position),
+ * `zoom` = Vergrößerung über „cover" hinaus. Das Original-Asset bleibt unangetastet.
+ */
+export const ekImageFrame = z.object({
+  x: z.number().min(0).max(100),
+  y: z.number().min(0).max(100),
+  zoom: z.number().min(1).max(5),
+});
+export type EkImageFrame = z.infer<typeof ekImageFrame>;
+
+export const DEFAULT_IMAGE_FRAME: EkImageFrame = { x: 50, y: 50, zoom: 1 };
+
 export const ekImageValue = z.object({
   assetId: z.string(),
   alt: z.string().optional(),
   url: z.string().optional(),
   width: z.number().int().positive().optional(),
   height: z.number().int().positive().optional(),
+  frame: ekImageFrame.optional(),
 });
 export type EkImageValue = z.infer<typeof ekImageValue>;
+
+/**
+ * Styles für nicht-destruktives 1:1-Framing – identisch in der Live-Vorschau
+ * und auf der veröffentlichten Seite. Container ist quadratisch + `overflow:hidden`,
+ * das Bild liegt als `object-fit:cover` darin und wird per `object-position` (Pan)
+ * und `scale` (Zoom) um den Fokuspunkt gerahmt.
+ */
+export function imageFrameStyles(frame?: EkImageFrame): {
+  container: Record<string, string>;
+  image: Record<string, string>;
+} {
+  const f = frame ?? DEFAULT_IMAGE_FRAME;
+  const pos = `${f.x}% ${f.y}%`;
+  return {
+    container: {
+      position: "relative",
+      aspectRatio: "1 / 1",
+      overflow: "hidden",
+    },
+    image: {
+      display: "block",
+      width: "100%",
+      height: "100%",
+      objectFit: "cover",
+      objectPosition: pos,
+      transform: `scale(${f.zoom})`,
+      transformOrigin: pos,
+    },
+  };
+}
 
 export const ekLinkValue = z.object({
   href: z.string(),

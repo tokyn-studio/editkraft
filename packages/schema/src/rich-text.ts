@@ -12,10 +12,20 @@
 export const RICH_TEXT_ALLOWLIST = {
   strong: [],
   em: [],
+  u: [],
+  s: [],
   a: ["href"],
+  p: [],
+  h2: [],
+  h3: [],
 } as const;
 
-const TAG_ALIASES: Record<string, string> = { b: "strong", i: "em" };
+const TAG_ALIASES: Record<string, string> = {
+  b: "strong",
+  i: "em",
+  strike: "s",
+  del: "s",
+};
 const SAFE_HREF = /^(https?:\/\/|mailto:|tel:|\/(?![\/\\]))/i;
 
 /** Escapt Text-Knoten. Entity-bewusst bei `&`, damit die Funktion idempotent bleibt. */
