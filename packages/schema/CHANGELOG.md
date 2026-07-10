@@ -1,5 +1,31 @@
 # @editkraft/schema
 
+## 0.4.0
+
+### Minor Changes
+
+- 9492038: Add the locale contract from Roadmap 1.4. This lands later than planned, but additively:
+
+  - `ekPageRowSchema` gains `locale` (BCP-47 tag, min length 2) and `translation_group_id`
+    (uuid); pages that share a `translation_group_id` are translations of one another.
+  - On the database side this replaces `unique(slug)` on `ek_pages` with
+    `unique(slug, locale)` — same slug is now allowed across different locales.
+
+  Both columns ship with defaults, so existing rows stay valid without a backfill.
+  Existing projects pick up the new columns and constraint by running the second
+  migration, `supabase/migrations/*_editkraft_i18n.sql` (added by `editkraft` 0.2.0) —
+  re-run `editkraft init` to generate it.
+
+- 103a10f: Rich-text formatting, link editing and image tools in the live preview:
+
+  - Schema: rich-text allowlist extended by p/h2/h3/u/s; `ekImageValue.frame`
+    (non-destructive 1:1 framing) plus `imageFrameStyles()` as a shared render
+    helper for preview and published pages
+  - React: floating formatting toolbar (B/I/U/S, paragraph/H2/H3, links),
+    link popover (URL/mail/tel, button and inline links), image popover
+    (replace, crop/frame, AI-edit hook), all wired through the existing
+    postMessage bridge
+
 ## 0.3.0
 
 ### Minor Changes
