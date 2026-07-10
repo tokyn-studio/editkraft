@@ -54,6 +54,6 @@ describe("sanitizeRichText", () => {
   });
 
   it("Allowlist ist stabil", () => {
-    expect(Object.keys(RICH_TEXT_ALLOWLIST).sort()).toEqual(["a", "em", "strong"]);
+    expect(Object.keys(RICH_TEXT_ALLOWLIST).sort()).toEqual(["a", "em", "h2", "h3", "p", "s", "strong", "u"]);
   });
 });

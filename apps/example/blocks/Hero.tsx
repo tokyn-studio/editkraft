@@ -1,4 +1,5 @@
-import { sanitizeRichText, type EkImageValue, type EkLinkValue } from "@editkraft/schema";
+import type { CSSProperties } from "react";
+import { sanitizeRichText, imageFrameStyles, type EkImageValue, type EkLinkValue } from "@editkraft/schema";
 
 /**
  * Beispiel-Block. `data-ek-field` bindet Elemente an ihre Felder – das Studio
@@ -18,12 +19,23 @@ export function Hero({
 }) {
   return (
     <section>
-      <h1 data-ek-field="headline">{headline}</h1>
+      <h1 data-ek-field="headline" dangerouslySetInnerHTML={{ __html: sanitizeRichText(headline) }} />
       {body ? <div data-ek-field="body" dangerouslySetInnerHTML={{ __html: sanitizeRichText(body) }} /> : null}
-      <div data-ek-field="image">
-        {image?.url ? <img src={image.url} alt={image.alt ?? ""} /> : null}
-      </div>
-      {cta ? <a href={cta.href}>{cta.label ?? cta.href}</a> : null}
+      {(() => {
+        const fs = imageFrameStyles(image?.frame);
+        return (
+          <div data-ek-field="image" style={fs.container as CSSProperties}>
+            {image?.url ? (
+              <img src={image.url} alt={image.alt ?? ""} style={fs.image as CSSProperties} />
+            ) : null}
+          </div>
+        );
+      })()}
+      {cta ? (
+        <a data-ek-field="cta" href={cta.href}>
+          {cta.label ?? cta.href}
+        </a>
+      ) : null}
     </section>
   );
 }

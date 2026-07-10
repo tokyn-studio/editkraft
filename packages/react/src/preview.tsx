@@ -1,13 +1,25 @@
 "use client";
 
-import { createElement, Fragment, useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  createElement,
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   parseMessage,
   createMessage,
   isAllowedOrigin,
   sanitizeRichText,
+  imageFrameStyles,
+  DEFAULT_IMAGE_FRAME,
   type Block,
   type EkFieldKind,
+  type EkImageFrame,
   type PageContent,
 } from "@editkraft/schema";
 import type { Registry } from "./registry";
@@ -27,24 +39,13 @@ function postToStudio(message: unknown, origin: string): void {
   window.parent.postMessage(message, origin);
 }
 
-const toolbarBtn = {
-  color: "#fff",
-  background: "transparent",
-  border: "none",
-  cursor: "pointer",
-  fontWeight: 700,
-  padding: "2px 8px",
-} as const;
-
 function PreviewBlocks({
   blocks,
   registry,
-  selectedId,
   onSelect,
 }: {
   blocks: Block[];
   registry: Registry;
-  selectedId: string | null;
   onSelect: (id: string) => void;
 }): ReactNode {
   return createElement(
@@ -59,31 +60,25 @@ function PreviewBlocks({
               ...(parsed.data as Record<string, unknown>),
               children:
                 block.children && block.children.length > 0
-                  ? createElement(PreviewBlocks, {
-                      blocks: block.children,
-                      registry,
-                      selectedId,
-                      onSelect,
-                    })
+                  ? createElement(PreviewBlocks, { blocks: block.children, registry, onSelect })
                   : undefined,
             })
           : createElement("div", { style: { padding: 8, color: "#92400e" } }, `Block "${block.type}"`);
 
-      // Klick-Overlay pro Block: Selektion an das Studio melden.
+      // Klick-Overlay pro Block: Selektion an das Studio melden. Das Auswahl-Outline
+      // wird NICHT hier (React) gesetzt, sondern imperativ per Effekt – sonst würde
+      // jede Auswahländerung diesen Block (inkl. contentEditable-Feld) neu rendern
+      // und die laufende Text-Selektion/den Cursor zerstören.
       return createElement(
         "div",
         {
           key: block.id,
           "data-editkraft-block-id": block.id,
-          "data-editkraft-selected": selectedId === block.id ? "true" : undefined,
           onClick: (e: { stopPropagation: () => void }) => {
             e.stopPropagation();
             onSelect(block.id);
           },
-          style: {
-            outline: selectedId === block.id ? "2px solid #2563eb" : undefined,
-            cursor: "pointer",
-          },
+          style: { cursor: "pointer" },
         },
         inner,
       );
@@ -107,9 +102,56 @@ export function EditkraftPreview({
   const [tree, setTree] = useState<PageContent>(content);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [toolbar, setToolbar] = useState<{ top: number; left: number } | null>(null);
+  const [fmt, setFmt] = useState<{
+    bold: boolean;
+    italic: boolean;
+    underline: boolean;
+    strike: boolean;
+    block: string;
+  } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const focusedRef = useRef<{ blockId: string; fieldKey: string } | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const refreshRef = useRef<() => void>(() => {});
+  // Zuletzt bekannte Selektion im fokussierten Feld – wird vor execCommand
+  // wiederhergestellt, falls der Toolbar-Klick sie kurz verliert.
+  const savedRangeRef = useRef<Range | null>(null);
+
+  // Link-Bearbeiten-Popover (für cta-Button-Felder UND Inline-<a> in richText).
+  const [linkPopover, setLinkPopover] = useState<{
+    mode: "cta" | "inline";
+    blockId: string;
+    fieldKey: string;
+    top: number;
+    left: number;
+    type: "url" | "mail" | "tel";
+    value: string;
+    label: string;
+  } | null>(null);
+  const linkElRef = useRef<HTMLAnchorElement | null>(null);
+  const popoverOpenRef = useRef(false);
+  const [pages, setPages] = useState<{ slug: string; title: string }[]>([]);
+
+  // Bild-Bearbeiten-Popover (Austausch per URL / Datei / Drag&Drop, Alt-Text).
+  const [imagePopover, setImagePopover] = useState<{
+    blockId: string;
+    fieldKey: string;
+    top: number;
+    left: number;
+    url: string;
+    alt: string;
+    status: "idle" | "uploading" | "error";
+  } | null>(null);
+
+  // Zuschneiden-Modus (non-destruktives 1:1-Framing: Pan per Ziehen, Zoom per Slider/Scroll).
+  const [cropMode, setCropMode] = useState<{
+    blockId: string;
+    fieldKey: string;
+    rect: { top: number; left: number; width: number; height: number };
+    frame: EkImageFrame;
+  } | null>(null);
+  const cropImgRef = useRef<HTMLImageElement | null>(null);
+  const cropDragRef = useRef<{ startX: number; startY: number; startFrame: EkImageFrame } | null>(null);
 
   // Feld-kind eines Blocks über die Registry auflösen.
   const fieldKindOf = (blockType: string, fieldKey: string): EkFieldKind | undefined =>
@@ -170,37 +212,100 @@ export function EditkraftPreview({
       if (!blockId || !fieldKey) continue;
       const type = blockTypeOf(blockId);
       const kind = type ? fieldKindOf(type, fieldKey) : undefined;
-      if (kind === "text" || kind === "richText") {
+      // Nur setzen, wenn noch nicht gesetzt: erneutes setAttribute bei jedem Render
+      // würde die Selektion/den Cursor zurücksetzen (→ Tippen unmöglich, Endlos-Loop
+      // mit der selectionchange-getriebenen Toolbar).
+      if ((kind === "text" || kind === "richText") && el.getAttribute("contenteditable") !== "true") {
         el.setAttribute("contenteditable", "true");
       }
     }
   });
 
-  // RichText-Mini-Toolbar: bei nicht-leerer Selektion im fokussierten richText-Feld einblenden.
+  // Selektions-/Fokusänderung → Toolbar neu positionieren + Aktiv-Status lesen.
+  // Immer über refreshRef, damit die aktuelle Closure (tree) genutzt wird.
   useEffect(() => {
-    const onSelectionChange = () => {
-      const sel = typeof window !== "undefined" ? window.getSelection() : null;
-      const focused = focusedRef.current;
-      if (!sel || sel.rangeCount === 0 || sel.isCollapsed || !focused) {
-        setToolbar(null);
-        return;
-      }
-      const type = blockTypeOf(focused.blockId);
-      const kind = type ? fieldKindOf(type, focused.fieldKey) : undefined;
-      if (kind !== "richText") {
-        setToolbar(null);
-        return;
-      }
-      const rect = sel.getRangeAt(0).getBoundingClientRect();
-      setToolbar({ top: Math.max(0, rect.top - 40), left: rect.left });
-    };
-    document.addEventListener("selectionchange", onSelectionChange);
-    return () => document.removeEventListener("selectionchange", onSelectionChange);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const h = () => refreshRef.current();
+    document.addEventListener("selectionchange", h);
+    return () => document.removeEventListener("selectionchange", h);
   }, []);
 
   const currentValueFromDom = (el: HTMLElement, kind: EkFieldKind): string =>
     kind === "richText" ? sanitizeRichText(el.innerHTML) : (el.textContent ?? "");
+
+  /**
+   * Positioniert die Format-Toolbar über dem fokussierten richText-Feld
+   * (an der Selektion, sonst am Feld-Anfang) und liest den aktiven Format-Status.
+   * Für Plain-Text/kein Fokus: Toolbar aus.
+   */
+  const refreshToolbar = () => {
+    const focused = focusedRef.current;
+    if (!focused) {
+      setToolbar(null);
+      setFmt(null);
+      return;
+    }
+    const type = blockTypeOf(focused.blockId);
+    const kind = type ? fieldKindOf(type, focused.fieldKey) : undefined;
+    if (kind !== "richText") {
+      setToolbar(null);
+      setFmt(null);
+      return;
+    }
+    const sel = typeof window !== "undefined" ? window.getSelection() : null;
+    // Aktuelle Selektion/Caret merken (auch collapsed – für „aktivieren & schreiben").
+    if (sel && sel.rangeCount > 0) savedRangeRef.current = sel.getRangeAt(0).cloneRange();
+    let rect: DOMRect | null = null;
+    if (sel && sel.rangeCount > 0 && !sel.isCollapsed) {
+      rect = sel.getRangeAt(0).getBoundingClientRect();
+    } else {
+      const el = containerRef.current?.querySelector<HTMLElement>(
+        `[data-editkraft-block-id="${focused.blockId}"] [data-ek-field="${focused.fieldKey}"]`,
+      );
+      rect = el?.getBoundingClientRect() ?? null;
+    }
+    if (!rect) {
+      setToolbar(null);
+      return;
+    }
+    // Über der Auswahl anzeigen; ist oben kein Platz (Feld ganz oben), darunter –
+    // damit die Leiste den Text nie verdeckt.
+    const above = rect.top - 46;
+    const top = above >= 6 ? above : rect.bottom + 8;
+    const left = Math.max(6, rect.left);
+    setToolbar((prev) => (prev && prev.top === top && prev.left === left ? prev : { top, left }));
+    const q = (c: string): boolean => {
+      try {
+        return document.queryCommandState(c);
+      } catch {
+        return false;
+      }
+    };
+    let block = "";
+    try {
+      block = String(document.queryCommandValue("formatBlock") || "").toLowerCase();
+    } catch {
+      block = "";
+    }
+    const next = {
+      bold: q("bold"),
+      italic: q("italic"),
+      underline: q("underline"),
+      strike: q("strikeThrough"),
+      block,
+    };
+    setFmt((prev) =>
+      prev &&
+      prev.bold === next.bold &&
+      prev.italic === next.italic &&
+      prev.underline === next.underline &&
+      prev.strike === next.strike &&
+      prev.block === next.block
+        ? prev
+        : next,
+    );
+  };
+  refreshRef.current = refreshToolbar;
+  popoverOpenRef.current = linkPopover !== null || imagePopover !== null || cropMode !== null;
 
   const sendUpdateDebounced = (blockId: string, fieldKey: string, value: string) => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -233,19 +338,58 @@ export function EditkraftPreview({
     if (!f) return;
     focusedRef.current = { blockId: f.blockId, fieldKey: f.fieldKey };
     postToStudio(createMessage("ek:focus-field", { blockId: f.blockId, fieldKey: f.fieldKey }), studioOrigin);
+    // Beim Klick in ein richText-Feld sofort die Format-Toolbar zeigen.
+    refreshToolbar();
   };
 
   const onFocusOut = (e: { target: EventTarget | null }) => {
     const f = resolveField(e.target as HTMLElement);
     focusedRef.current = null;
+    setToolbar(null);
+    setFmt(null);
     if (!f) return;
+    // Popover offen (z. B. Fokus im Link-Eingabefeld): Feld NICHT in den Tree
+    // schreiben – sonst re-rendert das Feld und die gespeicherte Selektion
+    // (für den Inline-Link) zeigt auf ersetzte Knoten.
+    if (popoverOpenRef.current) return;
     // Finalen (sanitisierten) Wert in den lokalen State übernehmen.
     const value = currentValueFromDom(f.el, f.kind);
     setTree((current) => updateBlockProps(current, f.blockId, { [f.fieldKey]: value }));
   };
 
-  const onClickCapture = (e: { target: EventTarget | null; stopPropagation: () => void }) => {
-    const el = (e.target as HTMLElement | null)?.closest?.<HTMLElement>("[data-ek-field]");
+  const onClickCapture = (e: {
+    target: EventTarget | null;
+    stopPropagation: () => void;
+    preventDefault: () => void;
+  }) => {
+    const target = e.target as HTMLElement | null;
+    if (!target) return;
+
+    // (A) Klick auf einen Link → Bearbeiten-Popover statt Navigation.
+    const anchor = target.closest?.("a") as HTMLAnchorElement | null;
+    if (anchor) {
+      const fieldEl = anchor.closest?.<HTMLElement>("[data-ek-field]");
+      const wrapper = fieldEl?.closest<HTMLElement>("[data-editkraft-block-id]");
+      const blockId = wrapper?.getAttribute("data-editkraft-block-id") ?? null;
+      const fieldKey = fieldEl?.getAttribute("data-ek-field") ?? null;
+      const type = blockId ? blockTypeOf(blockId) : undefined;
+      const kind = type && fieldKey ? fieldKindOf(type, fieldKey) : undefined;
+      if (blockId && fieldKey && kind === "link" && fieldEl === anchor) {
+        e.preventDefault();
+        e.stopPropagation();
+        openCtaPopover(blockId, fieldKey, anchor);
+        return;
+      }
+      if (blockId && fieldKey && kind === "richText") {
+        e.preventDefault();
+        e.stopPropagation();
+        openInlinePopover(blockId, fieldKey, anchor);
+        return;
+      }
+    }
+
+    // (B) Klick auf ein Bild-Feld (bestehend): Auswahl selbst setzen + Event stoppen.
+    const el = target.closest?.<HTMLElement>("[data-ek-field]");
     if (!el) return;
     const wrapper = el.closest<HTMLElement>("[data-editkraft-block-id]");
     const blockId = wrapper?.getAttribute("data-editkraft-block-id") ?? null;
@@ -254,63 +398,1138 @@ export function EditkraftPreview({
     const type = blockTypeOf(blockId);
     const kind = type ? fieldKindOf(type, fieldKey) : undefined;
     if (kind === "image") {
-      // Self-contained: Auswahl selbst setzen und Event stoppen, damit der
-      // bubble-phase onClick des Block-Wrappers (onSelect) nicht zusätzlich
-      // ein zweites, redundantes ek:select nach ek:focus-field sendet.
+      e.stopPropagation();
       setSelectedId(blockId);
       postToStudio(createMessage("ek:select", { blockId }), studioOrigin);
       postToStudio(createMessage("ek:focus-field", { blockId, fieldKey }), studioOrigin);
-      e.stopPropagation();
+      const imgEl = (el.querySelector?.<HTMLElement>("img") as HTMLElement | null) ?? el;
+      openImagePopover(blockId, fieldKey, imgEl);
     }
   };
 
-  const onSelect = (id: string) => {
-    setSelectedId(id);
-    postToStudio(createMessage("ek:select", { blockId: id }), studioOrigin);
+  // Stabil, damit der memoizte Block-Baum nicht bei jedem Render neu entsteht.
+  const onSelect = useCallback(
+    (id: string) => {
+      setSelectedId(id);
+      postToStudio(createMessage("ek:select", { blockId: id }), studioOrigin);
+    },
+    [studioOrigin],
+  );
+
+  // Block-Baum NUR von `tree` (und stabilen Deps) abhängig memoizen. So lösen
+  // Toolbar-/Format-/Auswahl-State-Änderungen KEIN Re-Render der editierbaren
+  // Felder aus – der contentEditable-DOM bleibt stabil, Selektion/Cursor überleben.
+  const blocksEl = useMemo(
+    () => createElement(PreviewBlocks, { blocks: tree.blocks, registry, onSelect }),
+    [tree.blocks, registry, onSelect],
+  );
+
+  // Auswahl-Outline imperativ setzen (ohne Re-Render der Blöcke).
+  useEffect(() => {
+    const root = containerRef.current;
+    if (!root) return;
+    for (const el of Array.from(root.querySelectorAll<HTMLElement>("[data-editkraft-block-id]"))) {
+      const on = el.getAttribute("data-editkraft-block-id") === selectedId;
+      el.style.outline = on ? "2px solid #F5A623" : "";
+      el.style.outlineOffset = on ? "2px" : "";
+      // Weiterhin als Attribut spiegeln (stabiler Hook für Tests/Tooling), aber
+      // imperativ statt über React-Props gesetzt – siehe Kommentar in PreviewBlocks:
+      // ein prop-getriebenes Attribut würde bei jeder Auswahländerung den ganzen
+      // Block (inkl. contentEditable-Feld) neu rendern und Cursor/Selektion zerstören.
+      if (on) {
+        el.setAttribute("data-editkraft-selected", "true");
+      } else {
+        el.removeAttribute("data-editkraft-selected");
+      }
+    }
+  }, [selectedId, tree.blocks]);
+
+  const restoreSelection = () => {
+    const sel = typeof window !== "undefined" ? window.getSelection() : null;
+    if (sel && savedRangeRef.current) {
+      sel.removeAllRanges();
+      sel.addRange(savedRangeRef.current);
+    }
+    return sel;
   };
 
-  const applyFormat = (command: "bold" | "italic" | "link") => {
+  // Liegt die aktuelle Selektion (noch) im gegebenen Feld?
+  const selectionInside = (el: HTMLElement): boolean => {
+    const sel = typeof window !== "undefined" ? window.getSelection() : null;
+    return !!(sel && sel.rangeCount > 0 && el.contains(sel.getRangeAt(0).commonAncestorContainer));
+  };
+
+  const applyFormat = (command: string) => {
     const focused = focusedRef.current;
     if (!focused) return;
-    if (command === "link") {
-      const href = typeof window !== "undefined" ? window.prompt("Link-Ziel (https://…)") : null;
-      if (href) document.execCommand("createLink", false, href);
-    } else {
-      document.execCommand(command);
-    }
     const el = containerRef.current?.querySelector<HTMLElement>(
       `[data-editkraft-block-id="${focused.blockId}"] [data-ek-field="${focused.fieldKey}"]`,
     );
-    if (el) sendUpdateDebounced(focused.blockId, focused.fieldKey, sanitizeRichText(el.innerHTML));
+    if (!el) return;
+
+    // WICHTIG: Selektion NUR wiederherstellen, wenn sie das Feld verlassen hat.
+    // Im Normalfall hält der Button-mousedown (preventDefault) den echten Cursor –
+    // den dürfen wir nicht mit einer alten Range überschreiben (sonst springt er nach vorn).
+    if (!selectionInside(el)) {
+      el.focus();
+      restoreSelection();
+    }
+
+    // Tag-basierte Auszeichnung erzwingen (<b>/<i>/<u>/<strike>) statt inline-styles –
+    // sonst verwirft der Sanitizer die (nicht erlaubten) <span style>-Wrapper.
+    try {
+      document.execCommand("styleWithCSS", false, "false");
+    } catch {
+      /* ältere Engines ohne styleWithCSS: ignorieren */
+    }
+
+    if (command === "link") {
+      // Inline-Link: Popover öffnen (mit ODER ohne Auswahl). Erzeugt wird der <a>
+      // erst beim Übernehmen – Abbrechen lässt den Text unangetastet. Mit Auswahl
+      // wird sie umschlossen, ohne Auswahl wird ein Link mit dem eingegebenen Text
+      // an der Cursor-Position eingefügt.
+      const sel = typeof window !== "undefined" ? window.getSelection() : null;
+      const hasRange = !!(sel && sel.rangeCount > 0);
+      if (hasRange) savedRangeRef.current = sel!.getRangeAt(0).cloneRange();
+      const rect = hasRange ? sel!.getRangeAt(0).getBoundingClientRect() : el.getBoundingClientRect();
+      linkElRef.current = null;
+      setLinkPopover({
+        mode: "inline",
+        blockId: focused.blockId,
+        fieldKey: focused.fieldKey,
+        top: rect.bottom + 8,
+        left: Math.max(6, rect.left),
+        type: "url",
+        value: "",
+        label: sel && !sel.isCollapsed ? sel.toString() : "",
+      });
+      return;
+    }
+
+    if (command === "p" || command === "h2" || command === "h3") {
+      document.execCommand("formatBlock", false, `<${command}>`);
+    } else {
+      // bold | italic | underline | strikethrough
+      document.execCommand(command);
+    }
+
+    sendUpdateDebounced(focused.blockId, focused.fieldKey, sanitizeRichText(el.innerHTML));
+    refreshToolbar();
+  };
+
+  // --- Link-Popover (Buttons/cta + Inline-<a>) ------------------------------
+  const parseHref = (href: string): { type: "url" | "mail" | "tel"; value: string } => {
+    if (href.startsWith("mailto:")) return { type: "mail", value: href.slice(7) };
+    if (href.startsWith("tel:")) return { type: "tel", value: href.slice(4) };
+    return { type: "url", value: href };
+  };
+
+  const buildHref = (type: "url" | "mail" | "tel", value: string): string => {
+    const v = value.trim();
+    if (!v) return "";
+    if (type === "mail") return `mailto:${v}`;
+    if (type === "tel") return `tel:${v.replace(/\s+/g, "")}`;
+    if (/^(https?:\/\/|\/)/i.test(v)) return v; // vollständige URL oder interne /slug
+    return `https://${v}`;
+  };
+
+  const findBlockById = (id: string): Block | undefined => {
+    const walk = (blocks: Block[]): Block | undefined => {
+      for (const b of blocks) {
+        if (b.id === id) return b;
+        if (b.children) {
+          const c = walk(b.children);
+          if (c) return c;
+        }
+      }
+      return undefined;
+    };
+    return walk(tree.blocks);
+  };
+
+  const openCtaPopover = (blockId: string, fieldKey: string, anchor: HTMLElement) => {
+    const val = findBlockById(blockId)?.props?.[fieldKey] as { href?: string; label?: string } | undefined;
+    const p = parseHref(val?.href ?? "");
+    const rect = anchor.getBoundingClientRect();
+    linkElRef.current = null;
+    setLinkPopover({
+      mode: "cta",
+      blockId,
+      fieldKey,
+      top: rect.bottom + 8,
+      left: Math.max(6, rect.left),
+      type: p.type,
+      value: p.value,
+      label: val?.label ?? anchor.textContent ?? "",
+    });
+  };
+
+  const openInlinePopover = (blockId: string, fieldKey: string, anchor: HTMLAnchorElement) => {
+    const p = parseHref(anchor.getAttribute("href") ?? "");
+    const rect = anchor.getBoundingClientRect();
+    linkElRef.current = anchor;
+    setLinkPopover({
+      mode: "inline",
+      blockId,
+      fieldKey,
+      top: rect.bottom + 8,
+      left: Math.max(6, rect.left),
+      type: p.type,
+      value: p.value,
+      label: anchor.textContent ?? "",
+    });
+  };
+
+  const closeLinkPopover = () => {
+    setLinkPopover(null);
+    linkElRef.current = null;
+  };
+
+  const pushFieldUpdate = (blockId: string, fieldKey: string) => {
+    const fieldEl = containerRef.current?.querySelector<HTMLElement>(
+      `[data-editkraft-block-id="${blockId}"] [data-ek-field="${fieldKey}"]`,
+    );
+    if (fieldEl) sendUpdateDebounced(blockId, fieldKey, sanitizeRichText(fieldEl.innerHTML));
+  };
+
+  const saveLink = () => {
+    const lp = linkPopover;
+    if (!lp) return;
+    const href = buildHref(lp.type, lp.value);
+    if (lp.mode === "cta") {
+      const props = { [lp.fieldKey]: { href, label: lp.label } };
+      setTree((cur) => updateBlockProps(cur, lp.blockId, props));
+      postToStudio(createMessage("ek:update", { blockId: lp.blockId, props }), studioOrigin);
+    } else {
+      const a = linkElRef.current;
+      const fieldEl = containerRef.current?.querySelector<HTMLElement>(
+        `[data-editkraft-block-id="${lp.blockId}"] [data-ek-field="${lp.fieldKey}"]`,
+      );
+      if (a) {
+        // bestehenden Inline-Link bearbeiten
+        if (!href) {
+          a.replaceWith(...Array.from(a.childNodes)); // leerer href → Link auflösen
+        } else {
+          a.setAttribute("href", href);
+          if (lp.label && lp.label !== a.textContent) a.textContent = lp.label;
+        }
+      } else if (href && fieldEl) {
+        // Neuen Link erzeugen. Die Range VOR fieldEl.focus() lokal sichern – focus()
+        // löst onFocusIn→refreshToolbar aus, das savedRangeRef sonst überschreibt.
+        const savedRange = savedRangeRef.current;
+        fieldEl.focus();
+        const sel = typeof window !== "undefined" ? window.getSelection() : null;
+        if (sel && savedRange) {
+          sel.removeAllRanges();
+          sel.addRange(savedRange);
+        }
+        try {
+          document.execCommand("styleWithCSS", false, "false");
+        } catch {
+          /* ignore */
+        }
+        if (savedRange && !savedRange.collapsed) {
+          // markierten Text umschließen
+          document.execCommand("createLink", false, href);
+          if (lp.label) {
+            const node = sel?.anchorNode ?? null;
+            const el2 = node && (node.nodeType === 1 ? (node as HTMLElement) : node.parentElement);
+            const newA = el2?.closest?.("a");
+            if (newA && newA.textContent !== lp.label) newA.textContent = lp.label;
+          }
+        } else {
+          // ohne Auswahl: Link mit Text an der Cursor-Position einfügen
+          const esc = (s: string) =>
+            s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+          document.execCommand("insertHTML", false, `<a href="${esc(href)}">${esc(lp.label || href)}</a>`);
+        }
+      }
+      if (fieldEl) pushFieldUpdate(lp.blockId, lp.fieldKey);
+    }
+    closeLinkPopover();
+  };
+
+  const removeInlineLink = () => {
+    const lp = linkPopover;
+    const a = linkElRef.current;
+    if (lp && lp.mode === "inline" && a) {
+      a.replaceWith(...Array.from(a.childNodes));
+      pushFieldUpdate(lp.blockId, lp.fieldKey);
+    }
+    closeLinkPopover();
+  };
+
+  // --- Bild-Popover (URL / Datei-Upload / Drag&Drop) ------------------------
+  const openImagePopover = (blockId: string, fieldKey: string, imgEl: HTMLElement) => {
+    const val = findBlockById(blockId)?.props?.[fieldKey] as { url?: string; alt?: string } | undefined;
+    const rect = imgEl.getBoundingClientRect();
+    const vh = typeof window !== "undefined" ? window.innerHeight : 800;
+    setImagePopover({
+      blockId,
+      fieldKey,
+      top: Math.max(6, Math.min(rect.top + 8, vh - 290)),
+      left: Math.max(6, rect.left + 8),
+      url: val?.url ?? "",
+      alt: val?.alt ?? "",
+      status: "idle",
+    });
+  };
+
+  const closeImagePopover = () => setImagePopover(null);
+
+  const mergeImageValue = (blockId: string, fieldKey: string, patch: Record<string, unknown>) => {
+    const cur = (findBlockById(blockId)?.props?.[fieldKey] ?? {}) as Record<string, unknown>;
+    const next = { ...cur, ...patch };
+    setTree((c) => updateBlockProps(c, blockId, { [fieldKey]: next }));
+    postToStudio(createMessage("ek:update", { blockId, props: { [fieldKey]: next } }), studioOrigin);
+  };
+
+  const applyImageUrl = () => {
+    const ip = imagePopover;
+    if (!ip) return;
+    const url = ip.url.trim();
+    if (url) mergeImageValue(ip.blockId, ip.fieldKey, { url, assetId: "" });
+    closeImagePopover();
+  };
+
+  const handleImageFile = (file: File) => {
+    const ip = imagePopover;
+    if (!ip || !file) return;
+    setImagePopover({ ...ip, status: "uploading" });
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = String(reader.result || "");
+      const base64 = dataUrl.includes(",") ? dataUrl.slice(dataUrl.indexOf(",") + 1) : "";
+      // Rohes postMessage (kein Schema-Typ): Datei serverseitig im Studio hochladen.
+      // Das Studio antwortet mit ek:update {assetId, url} → Bild aktualisiert sich.
+      if (typeof window !== "undefined") {
+        window.parent.postMessage(
+          {
+            channel: "editkraft",
+            v: 1,
+            type: "ek:asset-upload",
+            blockId: ip.blockId,
+            fieldKey: ip.fieldKey,
+            fileName: file.name,
+            mimeType: file.type || "application/octet-stream",
+            dataBase64: base64,
+          },
+          studioOrigin,
+        );
+      }
+      closeImagePopover();
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // KI-Bild-Editor im Studio öffnen (Raw-Nachricht wie ek:asset-upload – der
+  // Gemini-Key und der Asset-Upload leben serverseitig im Studio, nie hier).
+  const openAiEditor = (blockId: string, fieldKey: string) => {
+    const val = findBlockById(blockId)?.props?.[fieldKey] as { url?: string } | undefined;
+    if (typeof window !== "undefined") {
+      window.parent.postMessage(
+        { channel: "editkraft", v: 1, type: "ek:ai-edit-open", blockId, fieldKey, url: val?.url ?? "" },
+        studioOrigin,
+      );
+    }
+    closeImagePopover();
+  };
+
+  // --- Zuschneiden (1:1-Framing) --------------------------------------------
+  const clampPct = (n: number) => Math.max(0, Math.min(100, n));
+
+  const findImgEl = (blockId: string, fieldKey: string): HTMLImageElement | null =>
+    (containerRef.current?.querySelector(
+      `[data-editkraft-block-id="${blockId}"] [data-ek-field="${fieldKey}"] img`,
+    ) as HTMLImageElement | null) ?? null;
+
+  // Rahmen live auf das echte Kunden-<img> anwenden (identische Styles wie im Renderer).
+  const applyFrameToImg = (img: HTMLImageElement, frame: EkImageFrame) => {
+    Object.assign(img.style, imageFrameStyles(frame).image);
+  };
+
+  const openCrop = (blockId: string, fieldKey: string) => {
+    const img = findImgEl(blockId, fieldKey);
+    if (!img) return;
+    const val = findBlockById(blockId)?.props?.[fieldKey] as { frame?: EkImageFrame } | undefined;
+    const frame: EkImageFrame = val?.frame ? { ...val.frame } : { ...DEFAULT_IMAGE_FRAME };
+    const rect = img.getBoundingClientRect();
+    cropImgRef.current = img;
+    closeImagePopover();
+    setCropMode({
+      blockId,
+      fieldKey,
+      rect: { top: rect.top, left: rect.left, width: rect.width, height: rect.height },
+      frame,
+    });
+  };
+
+  const updateCropFrame = (next: EkImageFrame) => {
+    setCropMode((c) => (c ? { ...c, frame: next } : c));
+    if (cropImgRef.current) applyFrameToImg(cropImgRef.current, next);
+  };
+
+  const commitCrop = () => {
+    setCropMode((c) => {
+      if (c) mergeImageValue(c.blockId, c.fieldKey, { frame: c.frame });
+      return null;
+    });
+    cropImgRef.current = null;
+    cropDragRef.current = null;
+  };
+
+  const cancelCrop = () => {
+    setCropMode((c) => {
+      if (c && cropImgRef.current) {
+        const val = findBlockById(c.blockId)?.props?.[c.fieldKey] as { frame?: EkImageFrame } | undefined;
+        applyFrameToImg(cropImgRef.current, val?.frame ?? DEFAULT_IMAGE_FRAME);
+      }
+      return null;
+    });
+    cropImgRef.current = null;
+    cropDragRef.current = null;
+  };
+
+  // Toolbar-Bausteine (createElement, Inline-Styles – die Preview ist die Kundenseite).
+  const linkIcon: ReactNode = createElement(
+    "svg",
+    {
+      width: 15,
+      height: 15,
+      viewBox: "0 0 24 24",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: 2,
+      strokeLinecap: "round",
+      strokeLinejoin: "round",
+    },
+    createElement("path", { d: "M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" }),
+    createElement("path", { d: "M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" }),
+  );
+
+  const cropIcon: ReactNode = createElement(
+    "svg",
+    {
+      width: 15,
+      height: 15,
+      viewBox: "0 0 24 24",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: 2,
+      strokeLinecap: "round",
+      strokeLinejoin: "round",
+    },
+    createElement("path", { d: "M6 2v14a2 2 0 0 0 2 2h14" }),
+    createElement("path", { d: "M18 22V8a2 2 0 0 0-2-2H2" }),
+  );
+
+  const sparkleIcon: ReactNode = createElement(
+    "svg",
+    {
+      width: 15,
+      height: 15,
+      viewBox: "0 0 24 24",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: 2,
+      strokeLinecap: "round",
+      strokeLinejoin: "round",
+    },
+    createElement("path", {
+      d: "M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z",
+    }),
+    createElement("path", { d: "M20 3v4" }),
+    createElement("path", { d: "M22 5h-4" }),
+  );
+
+  // Kompakter Aktions-Button für das Bild-Popover (Zuschneiden / KI-Editor).
+  const imgActionButton = (icon: ReactNode, label: string, onClick: () => void, accent = false): ReactNode =>
+    createElement(
+      "button",
+      {
+        type: "button",
+        onMouseDown: (e: { preventDefault: () => void }) => e.preventDefault(),
+        onClick,
+        style: {
+          flex: 1,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 7,
+          padding: "8px 0",
+          borderRadius: 8,
+          border: accent ? "1px solid rgba(245,166,35,0.35)" : "1px solid #2E3138",
+          background: accent ? "rgba(245,166,35,0.10)" : "#0C0D0F",
+          color: accent ? "#FFB020" : "#EDEEF0",
+          fontSize: 13,
+          fontWeight: 600,
+          cursor: "pointer",
+        },
+      },
+      icon,
+      label,
+    );
+
+  const fmtButton = (opts: {
+    label: ReactNode;
+    title: string;
+    active: boolean;
+    onClick: () => void;
+    style?: Record<string, unknown>;
+  }): ReactNode =>
+    createElement(
+      "button",
+      {
+        type: "button",
+        title: opts.title,
+        // Mousedown darf die Selektion im contentEditable nicht verlieren.
+        onMouseDown: (e: { preventDefault: () => void }) => e.preventDefault(),
+        onClick: opts.onClick,
+        style: {
+          minWidth: 28,
+          height: 28,
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "0 7px",
+          fontSize: 13,
+          lineHeight: 1,
+          border: "none",
+          borderRadius: 7,
+          cursor: "pointer",
+          background: opts.active ? "rgba(245,166,35,0.16)" : "transparent",
+          color: opts.active ? "#FFB020" : "#A5A8B0",
+          transition: "background 120ms, color 120ms",
+          ...opts.style,
+        },
+      },
+      opts.label,
+    );
+
+  const divider = (): ReactNode =>
+    createElement("div", { style: { width: 1, height: 18, background: "#2E3138", margin: "0 3px" } });
+
+  const isParagraph = !fmt?.block || fmt.block === "p" || fmt.block === "div";
+
+  const renderLinkPopover = (): ReactNode => {
+    const lp = linkPopover;
+    if (!lp) return null;
+    const inputStyle = {
+      width: "100%",
+      boxSizing: "border-box" as const,
+      background: "#0C0D0F",
+      border: "1px solid #2E3138",
+      borderRadius: 7,
+      color: "#EDEEF0",
+      padding: "7px 9px",
+      fontSize: 13,
+      outline: "none",
+    };
+    const typeBtn = (t: "url" | "mail" | "tel", lbl: string): ReactNode =>
+      createElement(
+        "button",
+        {
+          type: "button",
+          key: t,
+          onMouseDown: (e: { preventDefault: () => void }) => e.preventDefault(),
+          onClick: () => setLinkPopover({ ...lp, type: t }),
+          style: {
+            flex: 1,
+            padding: "5px 0",
+            fontSize: 12,
+            borderRadius: 6,
+            cursor: "pointer",
+            border: `1px solid ${lp.type === t ? "transparent" : "#2E3138"}`,
+            background: lp.type === t ? "#F5A623" : "transparent",
+            color: lp.type === t ? "#1A1400" : "#A5A8B0",
+          },
+        },
+        lbl,
+      );
+    const placeholders: Record<string, string> = {
+      url: "https://… or /page",
+      mail: "name@domain.com",
+      tel: "+1 …",
+    };
+    const children: ReactNode[] = [
+      createElement(
+        "div",
+        { key: "types", style: { display: "flex", gap: 4 } },
+        typeBtn("url", "URL"),
+        typeBtn("mail", "Email"),
+        typeBtn("tel", "Phone"),
+      ),
+      createElement("input", {
+        key: "value",
+        value: lp.value,
+        placeholder: placeholders[lp.type],
+        onChange: (e: { target: { value: string } }) => setLinkPopover({ ...lp, value: e.target.value }),
+        style: inputStyle,
+      }),
+    ];
+    children.push(
+      createElement("input", {
+        key: "label",
+        value: lp.label,
+        placeholder: lp.mode === "cta" ? "Button text" : "Link text (optional)",
+        onChange: (e: { target: { value: string } }) => setLinkPopover({ ...lp, label: e.target.value }),
+        style: inputStyle,
+      }),
+    );
+    if (lp.type === "url" && pages.length > 0) {
+      children.push(
+        createElement(
+          "div",
+          { key: "pages", style: { display: "flex", flexDirection: "column" as const, gap: 2, maxHeight: 130, overflowY: "auto" as const } },
+          createElement(
+            "div",
+            { key: "ph", style: { fontSize: 11, color: "#6E7178", textTransform: "uppercase" as const, letterSpacing: 0.4 } },
+            "Internal page",
+          ),
+          ...pages.map((pg) =>
+            createElement(
+              "button",
+              {
+                type: "button",
+                key: pg.slug,
+                onMouseDown: (e: { preventDefault: () => void }) => e.preventDefault(),
+                onClick: () => setLinkPopover({ ...lp, type: "url", value: `/${pg.slug}` }),
+                style: {
+                  textAlign: "left" as const,
+                  padding: "5px 8px",
+                  borderRadius: 6,
+                  border: "none",
+                  background: lp.value === `/${pg.slug}` ? "rgba(245,166,35,0.16)" : "transparent",
+                  color: "#A5A8B0",
+                  cursor: "pointer",
+                  fontSize: 12,
+                },
+              },
+              pg.title || `/${pg.slug}`,
+            ),
+          ),
+        ),
+      );
+    }
+    const actions: ReactNode[] = [
+      createElement(
+        "button",
+        {
+          key: "save",
+          type: "button",
+          onMouseDown: (e: { preventDefault: () => void }) => e.preventDefault(),
+          onClick: saveLink,
+          style: {
+            flex: 1,
+            padding: "7px 0",
+            borderRadius: 7,
+            border: "none",
+            background: "#F5A623",
+            color: "#1A1400",
+            fontWeight: 600,
+            cursor: "pointer",
+            fontSize: 13,
+          },
+        },
+        "Apply",
+      ),
+    ];
+    if (lp.mode === "inline") {
+      actions.push(
+        createElement(
+          "button",
+          {
+            key: "rm",
+            type: "button",
+            onMouseDown: (e: { preventDefault: () => void }) => e.preventDefault(),
+            onClick: removeInlineLink,
+            style: {
+              padding: "7px 10px",
+              borderRadius: 7,
+              border: "1px solid #2E3138",
+              background: "transparent",
+              color: "#F98186",
+              cursor: "pointer",
+              fontSize: 13,
+            },
+          },
+          "Remove",
+        ),
+      );
+    }
+    actions.push(
+      createElement(
+        "button",
+        {
+          key: "cancel",
+          type: "button",
+          onMouseDown: (e: { preventDefault: () => void }) => e.preventDefault(),
+          onClick: closeLinkPopover,
+          style: {
+            padding: "7px 10px",
+            borderRadius: 7,
+            border: "1px solid #2E3138",
+            background: "transparent",
+            color: "#A5A8B0",
+            cursor: "pointer",
+            fontSize: 13,
+          },
+        },
+        "Cancel",
+      ),
+    );
+    children.push(createElement("div", { key: "actions", style: { display: "flex", gap: 6 } }, ...actions));
+
+    return createElement(
+      "div",
+      {
+        "data-editkraft-link-popover": "true",
+        style: {
+          position: "fixed",
+          top: lp.top,
+          left: lp.left,
+          zIndex: 2147483647,
+          width: 280,
+          display: "flex",
+          flexDirection: "column" as const,
+          gap: 8,
+          padding: 10,
+          background: "#1A1C1F",
+          border: "1px solid #2E3138",
+          borderRadius: 12,
+          boxShadow: "0 12px 34px -8px rgba(0,0,0,0.6)",
+          fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif",
+        },
+      },
+      ...children,
+    );
+  };
+
+  const renderImagePopover = (): ReactNode => {
+    const ip = imagePopover;
+    if (!ip) return null;
+    return createElement(
+      "div",
+      {
+        "data-editkraft-image-popover": "true",
+        onDragOver: (e: { preventDefault: () => void }) => e.preventDefault(),
+        onDrop: (e: { preventDefault: () => void; dataTransfer: { files: FileList } | null }) => {
+          e.preventDefault();
+          const f = e.dataTransfer?.files?.[0];
+          if (f) handleImageFile(f as File);
+        },
+        style: {
+          position: "fixed",
+          top: ip.top,
+          left: ip.left,
+          zIndex: 2147483647,
+          width: 300,
+          display: "flex",
+          flexDirection: "column" as const,
+          gap: 10,
+          padding: 12,
+          background: "#1A1C1F",
+          border: "1px solid #2E3138",
+          borderRadius: 12,
+          boxShadow: "0 12px 34px -8px rgba(0,0,0,0.6)",
+          fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif",
+        },
+      },
+      // Aktionen: Zuschneiden (nur mit vorhandenem Bild) + KI-Editor (immer).
+      createElement(
+        "div",
+        { style: { display: "flex", gap: 6 } },
+        (findBlockById(ip.blockId)?.props?.[ip.fieldKey] as { url?: string } | undefined)?.url
+          ? imgActionButton(cropIcon, "Crop", () => openCrop(ip.blockId, ip.fieldKey))
+          : null,
+        imgActionButton(sparkleIcon, "AI Editor", () => openAiEditor(ip.blockId, ip.fieldKey), true),
+      ),
+      createElement(
+        "label",
+        {
+          style: {
+            display: "flex",
+            flexDirection: "column" as const,
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 6,
+            minHeight: 88,
+            border: "1px dashed #3A3D45",
+            borderRadius: 10,
+            background: "#0C0D0F",
+            color: ip.status === "error" ? "#F98186" : "#A5A8B0",
+            fontSize: 12,
+            cursor: "pointer",
+            textAlign: "center" as const,
+            padding: 12,
+          },
+        },
+        ip.status === "uploading"
+          ? "Uploading …"
+          : ip.status === "error"
+            ? "Upload failed – try again"
+            : "Drag an image here or click to upload",
+        createElement("input", {
+          type: "file",
+          accept: "image/*",
+          onChange: (e: { target: { files: FileList | null } }) => {
+            const f = e.target.files?.[0];
+            if (f) handleImageFile(f as File);
+          },
+          style: { display: "none" },
+        }),
+      ),
+      createElement("input", {
+        value: ip.url,
+        placeholder: "…or image URL (https://…)",
+        onChange: (e: { target: { value: string } }) => setImagePopover({ ...ip, url: e.target.value }),
+        style: {
+          boxSizing: "border-box" as const,
+          width: "100%",
+          background: "#0C0D0F",
+          border: "1px solid #2E3138",
+          borderRadius: 7,
+          color: "#EDEEF0",
+          padding: "7px 9px",
+          fontSize: 13,
+          outline: "none",
+        },
+      }),
+      // Alt-Text (SEO/Screenreader) – wird beim Verlassen des Felds übernommen.
+      createElement("input", {
+        value: ip.alt,
+        placeholder: "Alt text (image description for SEO)",
+        onChange: (e: { target: { value: string } }) => setImagePopover({ ...ip, alt: e.target.value }),
+        onBlur: () => {
+          const cur = findBlockById(ip.blockId)?.props?.[ip.fieldKey] as { alt?: string } | undefined;
+          if ((cur?.alt ?? "") !== ip.alt) mergeImageValue(ip.blockId, ip.fieldKey, { alt: ip.alt });
+        },
+        style: {
+          boxSizing: "border-box" as const,
+          width: "100%",
+          background: "#0C0D0F",
+          border: "1px solid #2E3138",
+          borderRadius: 7,
+          color: "#EDEEF0",
+          padding: "7px 9px",
+          fontSize: 13,
+          outline: "none",
+        },
+      }),
+      createElement(
+        "div",
+        { style: { display: "flex", gap: 6 } },
+        createElement(
+          "button",
+          {
+            type: "button",
+            onMouseDown: (e: { preventDefault: () => void }) => e.preventDefault(),
+            onClick: applyImageUrl,
+            style: {
+              flex: 1,
+              padding: "7px 0",
+              borderRadius: 7,
+              border: "none",
+              background: "#F5A623",
+              color: "#1A1400",
+              fontWeight: 600,
+              cursor: "pointer",
+              fontSize: 13,
+            },
+          },
+          "Apply URL",
+        ),
+        createElement(
+          "button",
+          {
+            type: "button",
+            onMouseDown: (e: { preventDefault: () => void }) => e.preventDefault(),
+            onClick: closeImagePopover,
+            style: {
+              padding: "7px 12px",
+              borderRadius: 7,
+              border: "1px solid #2E3138",
+              background: "transparent",
+              color: "#A5A8B0",
+              cursor: "pointer",
+              fontSize: 13,
+            },
+          },
+          "Cancel",
+        ),
+      ),
+    );
+  };
+
+  const renderCropOverlay = (): ReactNode => {
+    const cm = cropMode;
+    if (!cm) return null;
+    const { rect, frame } = cm;
+    // Drag-Fläche exakt über dem Bild (Pan); Zoom per Slider oder Scrollrad.
+    const surface = createElement("div", {
+      "data-editkraft-crop-surface": "true",
+      onPointerDown: (e: {
+        clientX: number;
+        clientY: number;
+        pointerId: number;
+        preventDefault: () => void;
+        currentTarget: { setPointerCapture?: (id: number) => void };
+      }) => {
+        e.preventDefault();
+        cropDragRef.current = { startX: e.clientX, startY: e.clientY, startFrame: frame };
+        e.currentTarget.setPointerCapture?.(e.pointerId);
+      },
+      onPointerMove: (e: { clientX: number; clientY: number }) => {
+        const d = cropDragRef.current;
+        if (!d) return;
+        const size = rect.width || 1;
+        // Bild folgt dem Cursor: nach rechts ziehen zeigt den linken Bildteil → x sinkt.
+        const dx = ((e.clientX - d.startX) / size) * (100 / d.startFrame.zoom);
+        const dy = ((e.clientY - d.startY) / size) * (100 / d.startFrame.zoom);
+        updateCropFrame({
+          zoom: d.startFrame.zoom,
+          x: clampPct(d.startFrame.x - dx),
+          y: clampPct(d.startFrame.y - dy),
+        });
+      },
+      onPointerUp: (e: { pointerId: number; currentTarget: { releasePointerCapture?: (id: number) => void } }) => {
+        cropDragRef.current = null;
+        e.currentTarget.releasePointerCapture?.(e.pointerId);
+      },
+      onWheel: (e: { deltaY: number; preventDefault: () => void }) => {
+        e.preventDefault();
+        const zoom = Math.max(1, Math.min(5, frame.zoom - e.deltaY * 0.002));
+        updateCropFrame({ ...frame, zoom });
+      },
+      style: {
+        position: "fixed",
+        top: rect.top,
+        left: rect.left,
+        width: rect.width,
+        height: rect.height,
+        zIndex: 2147483646,
+        cursor: cropDragRef.current ? "grabbing" : "grab",
+        touchAction: "none",
+        boxShadow: "0 0 0 2px #F5A623, 0 0 0 100vmax rgba(0,0,0,0.45)",
+      },
+    });
+
+    // Sichtbarer Bildausschnitt im Viewport – die Controls ankern sich daran,
+    // damit sie nie unter dem unteren Bildschirmrand verschwinden.
+    const vw = typeof window !== "undefined" ? window.innerWidth : 1200;
+    const vh = typeof window !== "undefined" ? window.innerHeight : 800;
+    const visTop = Math.max(rect.top, 0);
+    const visBottom = Math.min(rect.top + rect.height, vh);
+    const centerX = (Math.max(rect.left, 0) + Math.min(rect.left + rect.width, vw)) / 2;
+
+    const zoomTo = (z: number) => updateCropFrame({ ...frame, zoom: Math.max(1, Math.min(5, z)) });
+
+    const glass = {
+      background: "rgba(14,15,18,0.82)",
+      backdropFilter: "blur(14px)",
+      WebkitBackdropFilter: "blur(14px)",
+      border: "1px solid rgba(255,255,255,0.09)",
+      fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif",
+    };
+
+    // Hinweis-Chip oben im sichtbaren Bildausschnitt (rein informativ).
+    const hint = createElement(
+      "div",
+      {
+        style: {
+          ...glass,
+          position: "fixed",
+          top: visTop + 14,
+          left: centerX,
+          transform: "translateX(-50%)",
+          zIndex: 2147483647,
+          padding: "6px 12px",
+          borderRadius: 999,
+          color: "#C9CCD3",
+          fontSize: 11.5,
+          letterSpacing: 0.2,
+          pointerEvents: "none" as const,
+          whiteSpace: "nowrap" as const,
+        },
+      },
+      "Drag to move · Scroll or use the slider to zoom",
+    );
+
+    const zoomStep = (label: string, delta: number) =>
+      createElement(
+        "button",
+        {
+          type: "button",
+          title: delta > 0 ? "Zoom in" : "Zoom out",
+          onMouseDown: (e: { preventDefault: () => void }) => e.preventDefault(),
+          onClick: () => zoomTo(frame.zoom + delta),
+          style: {
+            width: 26,
+            height: 26,
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            borderRadius: 999,
+            border: "none",
+            background: "transparent",
+            color: "#A5A8B0",
+            fontSize: 15,
+            lineHeight: 1,
+            cursor: "pointer",
+          },
+        },
+        label,
+      );
+
+    // Schwebende Pill-Leiste, unten mittig ÜBER dem sichtbaren Bildbereich.
+    const controls = createElement(
+      "div",
+      {
+        "data-editkraft-crop-controls": "true",
+        onMouseDown: (e: { preventDefault: () => void }) => e.preventDefault(),
+        style: {
+          ...glass,
+          position: "fixed",
+          top: Math.max(10, Math.min(visBottom - 66, vh - 66)),
+          left: centerX,
+          transform: "translateX(-50%)",
+          zIndex: 2147483647,
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "8px 10px",
+          borderRadius: 999,
+          boxShadow: "0 16px 40px -12px rgba(0,0,0,0.65)",
+          whiteSpace: "nowrap" as const,
+        },
+      },
+      zoomStep("−", -0.25),
+      createElement("input", {
+        type: "range",
+        min: 1,
+        max: 5,
+        step: 0.01,
+        value: frame.zoom,
+        onChange: (e: { target: { value: string } }) => zoomTo(Number(e.target.value) || 1),
+        style: { width: 130, accentColor: "#F5A623", cursor: "pointer" },
+      }),
+      zoomStep("+", 0.25),
+      createElement("span", {
+        style: { width: 1, height: 18, background: "rgba(255,255,255,0.12)", margin: "0 2px" },
+      }),
+      createElement(
+        "button",
+        {
+          type: "button",
+          onMouseDown: (e: { preventDefault: () => void }) => e.preventDefault(),
+          onClick: commitCrop,
+          style: {
+            padding: "7px 16px",
+            borderRadius: 999,
+            border: "none",
+            background: "#F5A623",
+            color: "#1A1400",
+            fontWeight: 650,
+            cursor: "pointer",
+            fontSize: 13,
+          },
+        },
+        "Done",
+      ),
+      createElement(
+        "button",
+        {
+          type: "button",
+          title: "Cancel",
+          onMouseDown: (e: { preventDefault: () => void }) => e.preventDefault(),
+          onClick: cancelCrop,
+          style: {
+            padding: "7px 13px",
+            borderRadius: 999,
+            border: "1px solid rgba(255,255,255,0.14)",
+            background: "transparent",
+            color: "#A5A8B0",
+            cursor: "pointer",
+            fontSize: 13,
+          },
+        },
+        "Cancel",
+      ),
+    );
+
+    return createElement(Fragment, null, surface, hint, controls);
   };
 
   return createElement(
-    "div",
-    { ref: containerRef, onInput, onClickCapture, onFocusCapture: onFocusIn, onBlurCapture: onFocusOut },
-    createElement(PreviewBlocks, { blocks: tree.blocks, registry, selectedId, onSelect }),
-    toolbar
+    Fragment,
+    null,
+    createElement(
+      "div",
+      { ref: containerRef, onInput, onClickCapture, onFocusCapture: onFocusIn, onBlurCapture: onFocusOut },
+      blocksEl,
+      toolbar
       ? createElement(
           "div",
           {
             "data-editkraft-toolbar": "true",
+            // Toolbar-Klicks dürfen die Selektion im contentEditable nicht verlieren.
+            onMouseDown: (e: { preventDefault: () => void }) => e.preventDefault(),
             style: {
               position: "fixed",
               top: toolbar.top,
               left: toolbar.left,
               display: "flex",
-              gap: 4,
+              alignItems: "center",
+              gap: 1,
               padding: 4,
-              background: "#111827",
-              borderRadius: 6,
+              background: "#1A1C1F",
+              border: "1px solid #2E3138",
+              borderRadius: 10,
+              boxShadow: "0 10px 30px -6px rgba(0,0,0,0.55)",
               zIndex: 2147483647,
+              fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif",
+              userSelect: "none",
             },
-            // Toolbar-Klicks dürfen die Selektion nicht verlieren.
-            onMouseDown: (e: { preventDefault: () => void }) => e.preventDefault(),
           },
-          createElement("button", { type: "button", onClick: () => applyFormat("bold"), style: toolbarBtn }, "B"),
-          createElement("button", { type: "button", onClick: () => applyFormat("italic"), style: toolbarBtn }, "i"),
-          createElement("button", { type: "button", onClick: () => applyFormat("link"), style: toolbarBtn }, "🔗"),
+          fmtButton({ label: "¶", title: "Paragraph", active: isParagraph, onClick: () => applyFormat("p") }),
+          fmtButton({ label: "H2", title: "Heading 2", active: fmt?.block === "h2", onClick: () => applyFormat("h2") }),
+          fmtButton({ label: "H3", title: "Heading 3", active: fmt?.block === "h3", onClick: () => applyFormat("h3") }),
+          divider(),
+          fmtButton({
+            label: "B",
+            title: "Bold",
+            active: !!fmt?.bold,
+            onClick: () => applyFormat("bold"),
+            style: { fontWeight: 800 },
+          }),
+          fmtButton({
+            label: "I",
+            title: "Italic",
+            active: !!fmt?.italic,
+            onClick: () => applyFormat("italic"),
+            style: { fontStyle: "italic", fontFamily: "Georgia, 'Times New Roman', serif" },
+          }),
+          fmtButton({
+            label: "U",
+            title: "Underline",
+            active: !!fmt?.underline,
+            onClick: () => applyFormat("underline"),
+            style: { textDecoration: "underline" },
+          }),
+          fmtButton({
+            label: "S",
+            title: "Strikethrough",
+            active: !!fmt?.strike,
+            onClick: () => applyFormat("strikethrough"),
+            style: { textDecoration: "line-through" },
+          }),
+          divider(),
+          fmtButton({ label: linkIcon, title: "Link", active: !!linkPopover, onClick: () => applyFormat("link") }),
         )
       : null,
+    ),
+    renderLinkPopover(),
+    renderImagePopover(),
+    renderCropOverlay(),
   );
 }
