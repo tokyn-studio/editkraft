@@ -283,6 +283,8 @@ describe("Bild-Feld", () => {
       (c) => c[0] as { channel?: string; type: string; blockId?: string; fieldKey?: string },
     );
     const libraryMessages = messages.filter((m) => m.type === "ek:library-open");
+    // Protokoll-Konsistenz: alle Raw-Messages tragen v:1 wie ihre Geschwister.
+    expect(libraryMessages[0]?.v).toBe(1);
 
     expect(libraryMessages.length).toBe(1);
     expect(libraryMessages[0]?.channel).toBe("editkraft");

@@ -740,7 +740,7 @@ export function EditkraftPreview({
   const openLibrary = (blockId: string, fieldKey: string) => {
     if (typeof window !== "undefined") {
       window.parent.postMessage(
-        { channel: "editkraft", type: "ek:library-open", blockId, fieldKey },
+        { channel: "editkraft", v: 1, type: "ek:library-open", blockId, fieldKey },
         studioOrigin,
       );
     }
