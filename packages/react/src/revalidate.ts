@@ -1,11 +1,11 @@
 import { pageTag } from "./data";
 
 export interface RevalidateHandlerOptions {
-  /** Shared Secret; typischerweise process.env.EDITKRAFT_REVALIDATE_SECRET. */
+  /** Shared secret; typically process.env.EDITKRAFT_REVALIDATE_SECRET. */
   secret?: string | undefined;
   /**
-   * Ermittelt betroffene Seiten-Slugs aus dem Webhook-Payload.
-   * Default: Supabase-DB-Webhook auf ek_pages (record/old_record.slug).
+   * Resolves affected page slugs from the webhook payload.
+   * Default: Supabase DB webhook on ek_pages (record/old_record.slug).
    */
   resolveSlugs?: ((payload: unknown) => string[]) | undefined;
 }
@@ -24,7 +24,7 @@ function defaultResolveSlugs(payload: unknown): string[] {
   return [...slugs];
 }
 
-/** Längensicherer, konstantzeitähnlicher String-Vergleich (auch edge-tauglich). */
+/** Length-safe, constant-time-like string comparison (edge-compatible). */
 function safeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
   let diff = 0;
@@ -40,18 +40,18 @@ function extractSecret(request: Request): string | null {
 }
 
 /**
- * Erzeugt einen Next-Route-Handler (POST) für /api/editkraft/revalidate.
- * Wird per Supabase-Webhook beim Publish aufgerufen, mit Shared Secret
- * abgesichert, und invalidiert den ISR-Tag der betroffenen Seite(n).
+ * Creates a Next route handler (POST) for /api/editkraft/revalidate.
+ * Called by a Supabase webhook on publish, secured with a shared secret,
+ * and invalidates the ISR tag of the affected page(s).
  *
- * Antworten: 500 (kein Secret konfiguriert), 401 (falsches Secret),
- * 200 (revalidiert, mit Liste der Slugs).
+ * Responses: 500 (no secret configured), 401 (wrong secret),
+ * 200 (revalidated, with the list of slugs).
  */
 export function createRevalidateHandler(options: RevalidateHandlerOptions) {
   return async function POST(request: Request): Promise<Response> {
     if (!options.secret) {
       return Response.json(
-        { error: "EDITKRAFT_REVALIDATE_SECRET ist nicht konfiguriert." },
+        { error: "EDITKRAFT_REVALIDATE_SECRET is not configured." },
         { status: 500 },
       );
     }
@@ -63,8 +63,8 @@ export function createRevalidateHandler(options: RevalidateHandlerOptions) {
 
     const payload = await request.json().catch(() => null);
     const slugs = (options.resolveSlugs ?? defaultResolveSlugs)(payload);
-    // Lazy import: next/cache wird nur zur Laufzeit gezogen, damit der statische
-    // Modulgraph (z. B. beim Import in Client-nahen Bäumen) sauber bleibt.
+    // Lazy import: next/cache is only pulled at runtime so the static module
+    // graph stays clean (e.g. when imported in client-adjacent trees).
     const { revalidateTag } = await import("next/cache");
     for (const slug of slugs) {
       revalidateTag(pageTag(slug));

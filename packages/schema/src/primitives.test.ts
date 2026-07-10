@@ -86,6 +86,6 @@ describe("Feld-Primitives: Validierung", () => {
   });
 
   it("ekList lehnt Nicht-Primitive-Items ab", () => {
-    expect(() => ekList(z.string())).toThrowError(/Primitive/);
+    expect(() => ekList(z.string())).toThrowError(/Editkraft primitive/);
   });
 });

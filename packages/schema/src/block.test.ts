@@ -45,7 +45,7 @@ describe("defineBlock", () => {
   it("wirft, wenn ein Feld kein Primitive ist", () => {
     expect(() =>
       defineBlock({ type: "Bad", label: "Bad", schema: z.object({ x: z.string() }) }),
-    ).toThrowError(/kein Editkraft-Primitive/);
+    ).toThrowError(/does not use an Editkraft primitive/);
   });
 
   it("verlangt type und label", () => {

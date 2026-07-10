@@ -1,14 +1,14 @@
 import { z } from "zod";
 
 /**
- * Feld-Primitives: Zod-Schemas mit angehängten Metadaten, aus denen das Studio
- * automatisch Eingabemasken generiert. Der Renderer nutzt die Zod-Seite zur
- * Validierung; das Studio liest die Metadaten (serialisierbar) über getFieldMeta.
+ * Field primitives: Zod schemas with attached metadata, from which the Studio
+ * automatically generates input forms. The renderer uses the Zod side for
+ * validation; the Studio reads the (serializable) metadata via getFieldMeta.
  *
- * Die Metadaten hängen an der konkreten Schema-Instanz (WeakMap). Das überlebt
- * die Platzierung in `z.object({...})` und das Umwickeln mit `.optional()`,
- * NICHT aber `.describe()` (klont die Instanz) – Labels kommen deshalb aus der
- * Primitive-Konfiguration, nicht aus `.describe()`.
+ * The metadata is attached to the concrete schema instance (WeakMap). It
+ * survives placement in `z.object({...})` and wrapping with `.optional()`,
+ * but NOT `.describe()` (which clones the instance) — labels therefore come
+ * from the primitive config, not from `.describe()`.
  */
 
 export type EkFieldKind =
@@ -36,7 +36,7 @@ function tag<T extends z.ZodTypeAny>(schema: T, meta: EkFieldMeta): T {
   return schema;
 }
 
-/** Wickelt optional/nullable/default ab, bis die Primitive-Instanz erreicht ist. */
+/** Unwraps optional/nullable/default until the primitive instance is reached. */
 function unwrap(schema: z.ZodTypeAny): z.ZodTypeAny {
   let s: z.ZodTypeAny = schema;
   for (;;) {
@@ -50,7 +50,7 @@ function unwrap(schema: z.ZodTypeAny): z.ZodTypeAny {
   }
 }
 
-/** Liest die Editkraft-Metadaten eines Feldes (auch durch optional/default hindurch). */
+/** Reads a field's Editkraft metadata (also through optional/default wrappers). */
 export function getFieldMeta(schema: z.ZodTypeAny): EkFieldMeta | undefined {
   return fieldMeta.get(unwrap(schema));
 }
@@ -59,11 +59,11 @@ export function isEkField(schema: z.ZodTypeAny): boolean {
   return getFieldMeta(schema) !== undefined;
 }
 
-// --- Wert-Schemas der komplexen Primitives (Teil des Contracts) --------------
+// --- Value schemas of the complex primitives (part of the contract) ----------
 
 /**
- * Non-destruktiver 1:1-Rahmen: `x`/`y` = Fokuspunkt in Prozent (object-position),
- * `zoom` = Vergrößerung über „cover" hinaus. Das Original-Asset bleibt unangetastet.
+ * Non-destructive 1:1 frame: `x`/`y` = focus point in percent (object-position),
+ * `zoom` = magnification beyond "cover". The original asset stays untouched.
  */
 export const ekImageFrame = z.object({
   x: z.number().min(0).max(100),
@@ -85,10 +85,10 @@ export const ekImageValue = z.object({
 export type EkImageValue = z.infer<typeof ekImageValue>;
 
 /**
- * Styles für nicht-destruktives 1:1-Framing – identisch in der Live-Vorschau
- * und auf der veröffentlichten Seite. Container ist quadratisch + `overflow:hidden`,
- * das Bild liegt als `object-fit:cover` darin und wird per `object-position` (Pan)
- * und `scale` (Zoom) um den Fokuspunkt gerahmt.
+ * Styles for non-destructive 1:1 framing — identical in the live preview
+ * and on the published page. The container is square + `overflow:hidden`,
+ * the image sits inside as `object-fit:cover` and is framed around the focus
+ * point via `object-position` (pan) and `scale` (zoom).
  */
 export function imageFrameStyles(frame?: EkImageFrame): {
   container: Record<string, string>;
@@ -134,7 +134,7 @@ export function ekText(config: { label?: string; multiline?: boolean } = {}) {
   return tag(z.string(), { kind: "text", ...config });
 }
 
-/** Rich-Text als sanitisiertes HTML-Subset (siehe RICH_TEXT_ALLOWLIST / sanitizeRichText). */
+/** Rich text as a sanitized HTML subset (see RICH_TEXT_ALLOWLIST / sanitizeRichText). */
 export function ekRichText(config: { label?: string } = {}) {
   return tag(z.string(), { kind: "richText", ...config });
 }
@@ -147,29 +147,29 @@ export function ekLink(config: { label?: string } = {}) {
   return tag(z.object({ ...ekLinkValue.shape }), { kind: "link", ...config });
 }
 
-/** Farbe als Token oder Hex (#rgb / #rrggbb). */
+/** Color as a token or hex (#rgb / #rrggbb). */
 export function ekColor(config: { label?: string } = {}) {
   return tag(
     z.string().refine((v) => HEX_COLOR.test(v) || /^[a-z][a-z0-9-]*$/i.test(v), {
-      message: "Farbe muss Hex (#rrggbb) oder ein Token-Name sein",
+      message: "Color must be hex (#rrggbb) or a token name",
     }),
     { kind: "color", ...config },
   );
 }
 
-/** Liste gleichartiger Primitives (z. B. ekList(ekText())). */
+/** List of same-kind primitives (e.g. ekList(ekText())). */
 export function ekList<T extends z.ZodTypeAny>(
   item: T,
   config: { label?: string } = {},
 ) {
   const itemMeta = getFieldMeta(item);
   if (!itemMeta) {
-    throw new Error("ekList: item muss ein Editkraft-Primitive sein");
+    throw new Error("ekList: item must be an Editkraft primitive");
   }
   return tag(z.array(item), { kind: "list", item: itemMeta, ...config });
 }
 
-/** Referenz auf einen anderen Datensatz (z. B. eine andere Page). */
+/** Reference to another record (e.g. another page). */
 export function ekReference(config: { to: string; label?: string }) {
   return tag(z.object({ ...ekReferenceValue.shape }), {
     kind: "reference",

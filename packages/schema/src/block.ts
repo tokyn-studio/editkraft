@@ -3,17 +3,17 @@ import { SCHEMA_VERSION } from "./version";
 import { getFieldMeta, type EkFieldMeta } from "./primitives";
 
 /**
- * Blocktree-Format – der Inhalt von ek_page_versions.content (JSONB).
- * `id` ist stabil über Edits hinweg (nanoid), `type` ist ein Key in der
- * Block-Registry des Kundenprojekts, `props` wird gegen das Zod-Schema des
- * Blocks validiert, `children` existiert nur bei Blöcken mit Slots.
+ * Block tree format — the content of ek_page_versions.content (JSONB).
+ * `id` is stable across edits (nanoid), `type` is a key in the customer
+ * project's block registry, `props` is validated against the block's Zod
+ * schema, `children` only exists for blocks with slots.
  */
 export interface Block {
   id: string;
   type: string;
   props: Record<string, unknown>;
-  // `| undefined` explizit, damit die rekursive z.lazy-Ableitung unter
-  // exactOptionalPropertyTypes zu z.array(...).optional() passt.
+  // `| undefined` explicit so the recursive z.lazy derivation matches
+  // z.array(...).optional() under exactOptionalPropertyTypes.
   children?: Block[] | undefined;
 }
 
@@ -32,14 +32,14 @@ export const pageContentSchema = z.object({
 });
 export type PageContent = z.infer<typeof pageContentSchema>;
 
-/** Leerer, aber gültiger PageContent mit der aktuellen Schema-Version. */
+/** Empty but valid PageContent with the current schema version. */
 export function emptyPageContent(): PageContent {
   return { schemaVersion: SCHEMA_VERSION, blocks: [] };
 }
 
-// --- Block-Definitionen (was Kundenprojekte registrieren) --------------------
+// --- Block definitions (what customer projects register) ---------------------
 
-/** Serialisierbare Feldbeschreibung für das Studio (aus dem Zod-Schema abgeleitet). */
+/** Serializable field description for the Studio (derived from the Zod schema). */
 export type BlockFieldDescriptor = EkFieldMeta & { key: string; optional: boolean };
 
 export interface BlockDefinitionInput<
@@ -47,28 +47,28 @@ export interface BlockDefinitionInput<
 > {
   type: string;
   schema: z.ZodObject<Shape>;
-  /** Benannte Slots für children, z. B. ['columns']. */
+  /** Named slots for children, e.g. ['columns']. */
   slots?: string[];
-  /** Anzeigename im Studio. */
+  /** Display name in the Studio. */
   label: string;
 }
 
 export interface BlockDefinition<Shape extends z.ZodRawShape = z.ZodRawShape>
   extends BlockDefinitionInput<Shape> {
   slots: string[];
-  /** Aus dem Schema abgeleitete, serialisierbare Feldliste (für das Studio). */
+  /** Serializable field list derived from the schema (for the Studio). */
   fields: BlockFieldDescriptor[];
 }
 
 /**
- * Definiert einen Block. Validiert, dass jedes Feld ein Editkraft-Primitive ist,
- * und leitet die serialisierbare Feldbeschreibung für das Studio ab.
+ * Defines a block. Validates that every field is an Editkraft primitive,
+ * and derives the serializable field description for the Studio.
  */
 export function defineBlock<Shape extends z.ZodRawShape>(
   input: BlockDefinitionInput<Shape>,
 ): BlockDefinition<Shape> {
-  if (!input.type) throw new Error("defineBlock: type ist erforderlich");
-  if (!input.label) throw new Error(`defineBlock("${input.type}"): label ist erforderlich`);
+  if (!input.type) throw new Error("defineBlock: type is required");
+  if (!input.label) throw new Error(`defineBlock("${input.type}"): label is required`);
 
   const shape = input.schema.shape as z.ZodRawShape;
   const fields: BlockFieldDescriptor[] = [];
@@ -77,8 +77,8 @@ export function defineBlock<Shape extends z.ZodRawShape>(
     const meta = getFieldMeta(field);
     if (!meta) {
       throw new Error(
-        `defineBlock("${input.type}"): Feld "${key}" nutzt kein Editkraft-Primitive ` +
-          "(ekText, ekImage, …). Nur Primitives sind im Studio editierbar.",
+        `defineBlock("${input.type}"): field "${key}" does not use an Editkraft primitive ` +
+          "(ekText, ekImage, …). Only primitives are editable in the Studio.",
       );
     }
     fields.push({ ...meta, key, optional: field.isOptional() });
@@ -87,7 +87,7 @@ export function defineBlock<Shape extends z.ZodRawShape>(
   return { ...input, slots: input.slots ?? [], fields };
 }
 
-/** Validiert die props eines Blocks gegen die Definition. */
+/** Validates a block's props against the definition. */
 export function validateBlockProps<Shape extends z.ZodRawShape>(
   definition: BlockDefinition<Shape>,
   props: unknown,
