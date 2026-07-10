@@ -2,15 +2,15 @@ import type { ComponentType } from "react";
 import type { BlockDefinition, BlockSchemaDescriptor } from "@editkraft/schema";
 import { EditkraftError } from "./errors";
 
-/** Props, die jede Block-Komponente erhält: die validierten Block-Props + children. */
+/** Props every block component receives: the validated block props + children. */
 export type BlockComponentProps = Record<string, unknown> & {
   children?: React.ReactNode;
 };
 
 export interface RegistryEntry {
   definition: BlockDefinition;
-  // Blöcke haben je nach Schema unterschiedliche Prop-Typen; die Registry ist
-  // bewusst heterogen. Die Laufzeit-Validierung übernimmt das Block-Schema.
+  // Blocks have different prop types depending on their schema; the registry is
+  // deliberately heterogeneous. Runtime validation is handled by the block schema.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   component: ComponentType<any>;
 }
@@ -23,9 +23,9 @@ export interface Registry {
 }
 
 /**
- * Baut die Block-Registry aus Definition+Komponente-Paaren und prüft auf
- * Vollständigkeit: jeder Typ braucht Definition (mit Schema) UND Komponente,
- * keine Duplikate. Fehlt etwas, wirft es sofort (Fail-fast beim App-Start).
+ * Builds the block registry from definition+component pairs and checks for
+ * completeness: every type needs a definition (with a schema) AND a component,
+ * no duplicates. If anything is missing, it throws immediately (fail-fast at app start).
  */
 export function createRegistry(entries: RegistryEntry[]): Registry {
   const map = new Map<string, RegistryEntry>();
@@ -34,26 +34,26 @@ export function createRegistry(entries: RegistryEntry[]): Registry {
     if (!entry?.definition?.type) {
       throw new EditkraftError(
         "REGISTRY_INVALID",
-        "Registry-Eintrag ohne gültige Block-Definition (defineBlock).",
+        "Registry entry without a valid block definition (defineBlock).",
       );
     }
     const type = entry.definition.type;
     if (!entry.definition.schema) {
       throw new EditkraftError(
         "REGISTRY_INVALID",
-        `Block "${type}": Definition ohne Schema.`,
+        `Block "${type}": definition has no schema.`,
       );
     }
     if (typeof entry.component !== "function") {
       throw new EditkraftError(
         "REGISTRY_INVALID",
-        `Block "${type}": keine React-Komponente registriert.`,
+        `Block "${type}": no React component registered.`,
       );
     }
     if (map.has(type)) {
       throw new EditkraftError(
         "REGISTRY_INVALID",
-        `Block-Typ "${type}" ist doppelt registriert.`,
+        `Block type "${type}" is registered twice.`,
       );
     }
     map.set(type, entry);
