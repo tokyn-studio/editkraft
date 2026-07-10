@@ -1,5 +1,6 @@
 import { migrationSql, i18nMigration } from "./templates/migration";
 import {
+  DEFAULT_LOCALE,
   editkraftConfig,
   registryTs,
   heroComponent,
@@ -21,9 +22,6 @@ export interface GenerateOptions {
   /** Timestamp for the migration filename (injectable for tests). */
   timestamp: string;
 }
-
-/** Default locale for newly scaffolded projects (matches editkraftConfig()). */
-const DEFAULT_LOCALE = "de";
 
 /**
  * Increments a fixed-width `YYYYMMDDHHMMSS` timestamp by one.

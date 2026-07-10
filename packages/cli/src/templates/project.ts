@@ -6,6 +6,9 @@
  * installed (Milestone 3). init only scaffolds — it doesn't install.
  */
 
+/** Default locale scaffolded into new projects (config template + i18n migration). */
+export const DEFAULT_LOCALE = "de";
+
 export function editkraftConfig(): string {
   return `import type { EditkraftConfig } from "@editkraft/react";
 
@@ -19,8 +22,8 @@ export default {
   // Allowed Studio origin for the preview bridge (postMessage origin check)
   studioOrigin: process.env.NEXT_PUBLIC_EDITKRAFT_STUDIO_ORIGIN ?? "",
   /** BCP-47 locales this site publishes. First entry pages are created in by default. */
-  locales: ["de"],
-  defaultLocale: "de",
+  locales: ["${DEFAULT_LOCALE}"],
+  defaultLocale: "${DEFAULT_LOCALE}",
 } satisfies EditkraftConfig;
 `;
 }
