@@ -8,6 +8,8 @@ export {
   loadDraftContent,
   defaultSupportedRange,
   pageTag,
+  getAlternateLocales,
+  getSitemapEntries,
   type PublishedPage,
   type LoadOptions,
 } from "./data";

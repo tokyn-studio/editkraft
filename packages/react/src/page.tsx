@@ -12,6 +12,10 @@ export interface EditkraftPageProps {
   /** Dev placeholder for unknown/invalid blocks (default: NODE_ENV). */
   dev?: boolean;
   supportedSchemaRange?: string;
+  /** BCP-47 locale to load. Without it, loads the page regardless of locale. */
+  locale?: string;
+  /** Locale to fall back to when no published page exists for `locale`. */
+  defaultLocale?: string;
   /** Fallback used when no published page exists (instead of throwing). */
   notFound?: ReactNode;
 }
@@ -30,6 +34,8 @@ export interface EditkraftPageProps {
 export async function EditkraftPage(props: EditkraftPageProps): Promise<ReactNode> {
   const page = await loadPublishedPage(props.supabase, props.slug, {
     ...(props.supportedSchemaRange ? { supportedSchemaRange: props.supportedSchemaRange } : {}),
+    ...(props.locale ? { locale: props.locale } : {}),
+    ...(props.defaultLocale ? { defaultLocale: props.defaultLocale } : {}),
   });
 
   if (!page) {
