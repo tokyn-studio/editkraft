@@ -10,6 +10,6 @@ export default {
   // Erlaubte Origin des Studios für die Preview-Bridge (postMessage-Origin-Check)
   studioOrigin: process.env.NEXT_PUBLIC_EDITKRAFT_STUDIO_ORIGIN ?? "",
   /** BCP-47 locales this site publishes. First entry pages are created in by default. */
-  locales: ["de"],
+  locales: ["de", "en"],
   defaultLocale: "de",
 } satisfies EditkraftConfig;
