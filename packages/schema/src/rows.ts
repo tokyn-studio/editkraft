@@ -24,6 +24,9 @@ export type PageMeta = z.infer<typeof pageMetaSchema>;
 export const ekPageRowSchema = z.object({
   id: z.string().uuid(),
   slug: z.string(),
+  /** BCP-47 language tag; pages of one translation_group are translations of each other. */
+  locale: z.string().min(2),
+  translation_group_id: z.string().uuid(),
   title: z.string(),
   meta: pageMetaSchema.default({}),
   status: pageStatusSchema,
