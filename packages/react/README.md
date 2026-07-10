@@ -62,7 +62,7 @@ throws `EditkraftError` with code `PAGE_NOT_FOUND` — or pass `notFound` to
 render a fallback instead of throwing. On an incompatible `schemaVersion` it
 throws `EditkraftSchemaError` with a clear upgrade/migration message.
 
-Read directly with `loadPublishedPage` / `loadDraftContent` (from `./data`) when
+Read directly with `loadPublishedPage` / `loadDraftContent` when
 you need more control than the `EditkraftPage` component provides.
 
 ## Revalidate handler

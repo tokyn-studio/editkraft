@@ -25,3 +25,9 @@ Locale-aware rendering for the Roadmap 1.4 contract, plus English-first messages
   current selection. Both use the same imperative, non-re-rendering mechanism the
   refactor introduced, so contentEditable fields still don't lose their cursor on
   selection change.
+
+> **Upgrade note:** `loadPublishedPage` now selects the `locale` and
+> `translation_group_id` columns unconditionally. Apply the i18n migration
+> (`*_editkraft_i18n.sql`, scaffolded by `npx editkraft init`) BEFORE
+> upgrading this package, or every page load fails with a self-describing
+> `CONTENT_INVALID` error (`column ek_pages.locale does not exist`).

@@ -32,6 +32,9 @@ Scaffolds everything a Next.js App Router project needs to host Editkraft conten
 
 - `supabase/migrations/<timestamp>_editkraft_init.sql` — content tables (`ek_pages`,
   `ek_page_versions`, `ek_assets`) with published-only RLS.
+- `supabase/migrations/<timestamp+1s>_editkraft_i18n.sql` — locale contract
+  (`locale`, `translation_group_id`, `unique(slug, locale)`); additive, safe on
+  existing installations
 - `editkraft.config.ts` — registry path and allowed Studio origin.
 - `blocks/registry.ts` + `blocks/Hero.tsx` — an example block registry and component.
 - `app/api/editkraft/revalidate/route.ts` — the ISR revalidate webhook handler.
@@ -47,6 +50,7 @@ timestamp instead of creating a second migration file.
 ```
 $ npx editkraft init
 created  supabase/migrations/…_editkraft_init.sql
+created  supabase/migrations/…_editkraft_i18n.sql
 created  blocks/registry.ts
 created  app/editkraft/preview/…
 Editkraft is set up.

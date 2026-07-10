@@ -3,12 +3,12 @@
 "@editkraft/react": minor
 ---
 
-Rich-Text-Formatierung, Link-Bearbeitung und Bild-Werkzeuge in der Live-Vorschau:
+Rich-text formatting, link editing and image tools in the live preview:
 
-- Schema: Rich-Text-Allowlist um p/h2/h3/u/s erweitert; `ekImageValue.frame`
-  (non-destruktives 1:1-Framing) + `imageFrameStyles()` als gemeinsame
-  Render-Helfer für Vorschau und veröffentlichte Seite
-- React: schwebende Formatierungs-Toolbar (B/I/U/S, Absatz/H2/H3, Links),
-  Link-Popover (URL/Mail/Tel, Button- und Inline-Links), Bild-Popover
-  (URL/Upload/Drag&Drop, Alt-Text), 1:1-Zuschneiden mit Pan+Zoom sowie
-  Öffnen des Studio-KI-Bild-Editors (ek:ai-edit-open)
+- Schema: rich-text allowlist extended by p/h2/h3/u/s; `ekImageValue.frame`
+  (non-destructive 1:1 framing) plus `imageFrameStyles()` as a shared render
+  helper for preview and published pages
+- React: floating formatting toolbar (B/I/U/S, paragraph/H2/H3, links),
+  link popover (URL/mail/tel, button and inline links), image popover
+  (replace, crop/frame, AI-edit hook), all wired through the existing
+  postMessage bridge
