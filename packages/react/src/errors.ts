@@ -1,6 +1,6 @@
 /**
- * Fehlertypen des Renderers. Alle mit klarer Handlungsanweisung – nie stiller
- * Crash. `code` ist stabil für programmatische Behandlung.
+ * Renderer error types. All come with a clear course of action — never a
+ * silent crash. `code` is stable for programmatic handling.
  */
 export type EditkraftErrorCode =
   | "REGISTRY_INVALID"
@@ -25,10 +25,10 @@ export class EditkraftSchemaError extends EditkraftError {
   ) {
     super(
       "SCHEMA_INCOMPATIBLE",
-      `Der Content wurde mit @editkraft/schema ${writtenVersion} geschrieben, ` +
-        `dieser Renderer unterstützt aber ${supportedRange}. ` +
-        "Aktualisiere @editkraft/react und @editkraft/schema im Projekt auf zueinander " +
-        "passende Versionen (gleiche Major) oder migriere den Content im Studio.",
+      `Content was written with @editkraft/schema ${writtenVersion}, ` +
+        `but this renderer supports ${supportedRange}. ` +
+        "Update @editkraft/react and @editkraft/schema in the project to matching " +
+        "versions (same major) or migrate the content in the Studio.",
     );
     this.name = "EditkraftSchemaError";
   }

@@ -76,7 +76,7 @@ describe("renderBlocks", () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     const bad: Block[] = [{ id: "b", type: "Heading", props: { headline: 123 } }];
     expect(html(bad, false)).toBe("");
-    expect(html(bad, true)).toContain("Ungültige Props");
+    expect(html(bad, true)).toContain("Invalid props");
   });
 
   it("sanitisiert richText-Props zentral, auch wenn die Komponente selbst nicht sanitisiert", () => {

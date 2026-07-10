@@ -73,7 +73,7 @@ describe("migrateContent", () => {
 
   it("Major-Sprung ohne Migration → wirft mit Handlungsanweisung", () => {
     const c: PageContent = { schemaVersion: "1.0.0", blocks: [] };
-    expect(() => migrateContent(c, "2.0.0")).toThrowError(/Keine Migration/);
+    expect(() => migrateContent(c, "2.0.0")).toThrowError(/No migration registered/);
   });
 
   it("registrierte Migration wird über Major-Grenzen angewandt", () => {

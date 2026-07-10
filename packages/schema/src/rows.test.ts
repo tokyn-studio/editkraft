@@ -24,6 +24,8 @@ describe("DB-Row-Schemas", () => {
     const row = ekPageRowSchema.parse({
       id: uuid,
       slug: "start",
+      locale: "en",
+      translation_group_id: uuid,
       title: "Startseite",
       status: "published",
       published_version_id: uuid,
@@ -74,5 +76,41 @@ describe("DB-Row-Schemas", () => {
 
   it("Asset-Bucket-Konstante", () => {
     expect(EK_ASSETS_BUCKET).toBe("ek-assets");
+  });
+});
+
+describe("ekPageRowSchema locale contract", () => {
+  const base = {
+    id: "5f0f6a3e-1111-4222-8333-444455556666",
+    slug: "home",
+    title: "Home",
+    meta: {},
+    status: "published",
+    published_version_id: null,
+    created_at: "2026-07-10T00:00:00Z",
+    updated_at: "2026-07-10T00:00:00Z",
+  };
+
+  it("accepts locale and translation_group_id", () => {
+    const row = ekPageRowSchema.parse({
+      ...base,
+      locale: "de",
+      translation_group_id: "5f0f6a3e-aaaa-4bbb-8ccc-444455556666",
+    });
+    expect(row.locale).toBe("de");
+  });
+
+  it("rejects a row without locale", () => {
+    expect(() => ekPageRowSchema.parse(base)).toThrow();
+  });
+
+  it("rejects a single-character locale", () => {
+    expect(() =>
+      ekPageRowSchema.parse({
+        ...base,
+        locale: "a",
+        translation_group_id: "5f0f6a3e-aaaa-4bbb-8ccc-444455556666",
+      }),
+    ).toThrow();
   });
 });

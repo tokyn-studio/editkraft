@@ -8,6 +8,8 @@ export {
   loadDraftContent,
   defaultSupportedRange,
   pageTag,
+  getAlternateLocales,
+  getSitemapEntries,
   type PublishedPage,
   type LoadOptions,
 } from "./data";
@@ -26,4 +28,8 @@ export {
 export type EditkraftConfig = {
   registry: string;
   studioOrigin: string;
+  /** BCP-47 locales this site publishes. First entry pages are created in by default. */
+  locales?: string[];
+  /** Locale used when none is specified. Should be one of `locales`. */
+  defaultLocale?: string;
 };

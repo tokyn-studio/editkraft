@@ -1,23 +1,29 @@
 /**
- * Scaffold-Dateien, die `editkraft init` ins Kundenprojekt schreibt.
- * Alle Templates sind reine Funktionen (snapshot-testbar).
+ * Scaffold files that `editkraft init` writes into the customer project.
+ * All templates are pure functions (snapshot-testable).
  *
- * Die Renderer-Imports (`@editkraft/react`) funktionieren, sobald das Paket
- * installiert ist (Meilenstein 3). init scaffoldet nur – es installiert nicht.
+ * The renderer imports (`@editkraft/react`) work once the package is
+ * installed (Milestone 3). init only scaffolds — it doesn't install.
  */
+
+/** Default locale scaffolded into new projects (config template + i18n migration). */
+export const DEFAULT_LOCALE = "de";
 
 export function editkraftConfig(): string {
   return `import type { EditkraftConfig } from "@editkraft/react";
 
 /**
- * Editkraft-Konfiguration deines Projekts.
- * Die erlaubte Studio-Origin kommt aus der ENV (kein Hardcoding von Secrets).
+ * Editkraft configuration for your project.
+ * The allowed Studio origin comes from ENV (no hardcoding secrets).
  */
 export default {
-  // Pfad zur Block-Registry (siehe blocks/registry.ts)
+  // Path to the block registry (see blocks/registry.ts)
   registry: "./blocks/registry",
-  // Erlaubte Origin des Studios für die Preview-Bridge (postMessage-Origin-Check)
+  // Allowed Studio origin for the preview bridge (postMessage origin check)
   studioOrigin: process.env.NEXT_PUBLIC_EDITKRAFT_STUDIO_ORIGIN ?? "",
+  /** BCP-47 locales this site publishes. First entry pages are created in by default. */
+  locales: ["${DEFAULT_LOCALE}"],
+  defaultLocale: "${DEFAULT_LOCALE}",
 } satisfies EditkraftConfig;
 `;
 }
@@ -29,17 +35,17 @@ import { z } from "zod";
 import { Hero } from "./Hero";
 
 /**
- * Block-Registry: paart jede Block-Definition mit ihrer React-Komponente.
- * createRegistry validiert, dass jeder Typ Definition UND Komponente hat.
+ * Block registry: pairs each block definition with its React component.
+ * createRegistry validates that every type has both a definition AND a component.
  */
 export const registry = createRegistry([
   {
     definition: defineBlock({
       type: "Hero",
-      label: "Hero-Bereich",
+      label: "Hero section",
       schema: z.object({
-        headline: ekText({ label: "Überschrift" }),
-        image: ekImage({ label: "Bild" }),
+        headline: ekText({ label: "Headline" }),
+        image: ekImage({ label: "Image" }),
         cta: ekLink({ label: "Button" }).optional(),
       }),
     }),
@@ -53,8 +59,8 @@ export function heroComponent(): string {
   return `import type { EkImageValue, EkLinkValue } from "@editkraft/schema";
 
 /**
- * Beispiel-Block. Passe Markup und Styling an dein Design an – die Props kommen
- * validiert aus der Block-Definition in blocks/registry.ts.
+ * Example block. Adjust markup and styling to your design — props come
+ * validated from the block definition in blocks/registry.ts.
  */
 export function Hero({
   headline,
@@ -80,8 +86,8 @@ export function revalidateRoute(): string {
   return `import { createRevalidateHandler } from "@editkraft/react";
 
 /**
- * Revalidate-Endpoint. Wird per Supabase-Webhook beim Publish aufgerufen und
- * mit einem Shared Secret abgesichert (EDITKRAFT_REVALIDATE_SECRET).
+ * Revalidate endpoint. Called by a Supabase webhook on publish and
+ * secured with a shared secret (EDITKRAFT_REVALIDATE_SECRET).
  */
 export const POST = createRevalidateHandler({
   secret: process.env.EDITKRAFT_REVALIDATE_SECRET,
@@ -97,10 +103,10 @@ import { verifyDraftToken } from "@editkraft/schema";
 import { PreviewClient } from "../preview-client";
 
 /**
- * Preview-Route für das Studio. Zugriff über ein signiertes, kurzlebiges
- * Draft-Token (?token=…) statt Draft-Mode-Cookie – funktioniert damit auch im
- * Cross-Origin-iframe. Lädt Draft-Content serverseitig (Service-Key) und
- * übergibt nur den serialisierbaren Content an den Client-Wrapper.
+ * Preview route for the Studio. Accessed via a signed, short-lived
+ * draft token (?token=…) instead of the Draft Mode cookie — this also works
+ * in a cross-origin iframe. Loads draft content server-side (service key)
+ * and passes only serializable content to the client wrapper.
  */
 export default async function EditkraftPreviewPage({
   params,
@@ -141,9 +147,9 @@ import { EditkraftPreview } from "@editkraft/react/preview";
 import { registry } from "@/blocks/registry";
 
 /**
- * Client-Wrapper: importiert die Registry (mit Komponenten) client-seitig, damit
- * keine Funktionen über die Server→Client-Grenze gereicht werden. Der Server
- * übergibt nur den serialisierbaren Draft-Content.
+ * Client wrapper: imports the registry (with components) on the client side so
+ * no functions cross the server→client boundary. The server
+ * passes only serializable draft content.
  */
 export function PreviewClient({
   content,
@@ -157,19 +163,19 @@ export function PreviewClient({
 `;
 }
 
-/** Env-Variablen, die init in .env.local-Beispiel und Ausgabe erwähnt. */
+/** Env vars that init mentions in the .env.local example and its output. */
 export function envExample(): string {
   return `# Editkraft
-# Supabase deines Projekts (Server-only Service-Key niemals mit NEXT_PUBLIC_ prefixen!)
+# Supabase for your project (never prefix the server-only service key with NEXT_PUBLIC_!)
 SUPABASE_URL=
 SUPABASE_SERVICE_ROLE_KEY=
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
-# Shared Secret für den Revalidate-Webhook
+# Shared secret for the revalidate webhook
 EDITKRAFT_REVALIDATE_SECRET=
-# Shared Secret für signierte Draft-Preview-Tokens (Studio ⇄ Kundenseite)
+# Shared secret for signed draft-preview tokens (Studio <-> customer site)
 EDITKRAFT_PREVIEW_SECRET=
-# Erlaubte Studio-Origin für die Preview-Bridge
+# Allowed Studio origin for the preview bridge
 NEXT_PUBLIC_EDITKRAFT_STUDIO_ORIGIN=https://studio.editkraft.dev
 `;
 }

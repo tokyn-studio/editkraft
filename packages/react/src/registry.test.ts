@@ -34,14 +34,14 @@ describe("createRegistry", () => {
         { definition: heroDef, component: Comp },
         { definition: heroDef, component: Comp },
       ]),
-    ).toThrowError(/doppelt/);
+    ).toThrowError(/registered twice/);
   });
 
   it("wirft bei Eintrag ohne Definition", () => {
     expect(() =>
       // @ts-expect-error absichtlich ungültig
       createRegistry([{ component: Comp }]),
-    ).toThrowError(/Definition/);
+    ).toThrowError(/definition/);
   });
 
   it("descriptors() liefert serialisierbare Block-Deskriptoren", () => {

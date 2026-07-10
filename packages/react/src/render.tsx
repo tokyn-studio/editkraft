@@ -3,7 +3,7 @@ import { sanitizeRichText, type Block, type BlockFieldDescriptor } from "@editkr
 import type { Registry } from "./registry";
 
 export interface RenderOptions {
-  /** Dev-Modus zeigt für unbekannte/ungültige Blöcke einen sichtbaren Platzhalter. */
+  /** Dev mode shows a visible placeholder for unknown/invalid blocks. */
   dev?: boolean;
 }
 
@@ -30,12 +30,12 @@ function Placeholder({ text }: { text: string }): ReactNode {
 }
 
 /**
- * Sanitisiert alle richText-Props zentral, bevor sie an die Komponente gehen –
- * secure-by-default, unabhängig davon, ob der Block-Autor selbst
- * `sanitizeRichText` aufruft. Mutiert `props` nicht.
+ * Sanitizes all richText props centrally before they reach the component —
+ * secure by default, regardless of whether the block author calls
+ * `sanitizeRichText` themselves. Does not mutate `props`.
  *
- * Bekannte Einschränkung: nur Top-Level-richText-Felder werden erfasst.
- * richText INNERHALB von `ekList(...)`-Items wird (noch) nicht sanitisiert.
+ * Known limitation: only top-level richText fields are covered.
+ * richText INSIDE `ekList(...)` items is not (yet) sanitized.
  */
 function sanitizeRichTextProps(
   props: Record<string, unknown>,
@@ -53,10 +53,10 @@ function sanitizeRichTextProps(
 }
 
 /**
- * Rendert einen einzelnen Block über die Registry.
- * - Unbekannter Typ: Production → console.warn + überspringen (null),
- *   Dev → sichtbarer Platzhalter.
- * - Ungültige Props (Schema): Dev → Platzhalter, Production → warn + überspringen.
+ * Renders a single block via the registry.
+ * - Unknown type: production → console.warn + skip (null),
+ *   dev → visible placeholder.
+ * - Invalid props (schema): dev → placeholder, production → warn + skip.
  */
 function renderBlock(block: Block, registry: Registry, options: RenderOptions): ReactNode {
   const entry = registry.get(block.type);
@@ -64,10 +64,10 @@ function renderBlock(block: Block, registry: Registry, options: RenderOptions): 
     if (isDev(options)) {
       return createElement(Placeholder, {
         key: block.id,
-        text: `Unbekannter Block-Typ "${block.type}" (nicht in der Registry).`,
+        text: `Unknown block type "${block.type}" (not in the registry).`,
       });
     }
-    console.warn(`[editkraft] Unbekannter Block-Typ "${block.type}" übersprungen.`);
+    console.warn(`[editkraft] Unknown block type "${block.type}" skipped.`);
     return null;
   }
 
@@ -76,12 +76,12 @@ function renderBlock(block: Block, registry: Registry, options: RenderOptions): 
     if (isDev(options)) {
       return createElement(Placeholder, {
         key: block.id,
-        text: `Ungültige Props für Block "${block.type}": ${parsed.error.issues
+        text: `Invalid props for block "${block.type}": ${parsed.error.issues
           .map((i) => `${i.path.join(".")} ${i.message}`)
           .join(", ")}`,
       });
     }
-    console.warn(`[editkraft] Ungültige Props für Block "${block.type}" übersprungen.`);
+    console.warn(`[editkraft] Invalid props for block "${block.type}" skipped.`);
     return null;
   }
 
@@ -102,7 +102,7 @@ function renderBlock(block: Block, registry: Registry, options: RenderOptions): 
   });
 }
 
-/** Rendert eine Block-Liste zu ReactNode. */
+/** Renders a list of blocks to a ReactNode. */
 export function renderBlocks(
   blocks: Block[],
   registry: Registry,

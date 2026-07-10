@@ -1,11 +1,11 @@
 import type { PageContent } from "./block";
 
 /**
- * SemVer des Contracts. MUSS mit der `version` in package.json übereinstimmen.
- * Jeder geschriebene Blocktree trägt die schemaVersion, unter der er entstand.
+ * SemVer of the contract. MUST match the `version` in package.json.
+ * Every written block tree carries the schemaVersion it was created under.
  *
- * Breaking-Change-Regel: alles, was einen existierenden Blocktree ungültig macht
- * oder das Verhalten der Feld-Primitives ändert, ist ein Major-Release.
+ * Breaking-change rule: anything that invalidates an existing block tree
+ * or changes the behavior of the field primitives is a major release.
  */
 export const SCHEMA_VERSION = "0.1.0";
 
@@ -18,7 +18,7 @@ function parse(input: string): Semver {
     Number.parseInt(n, 10),
   );
   if ([major, minor, patch].some((n) => Number.isNaN(n))) {
-    throw new Error(`Ungültige SemVer-Version: "${input}"`);
+    throw new Error(`Invalid SemVer version: "${input}"`);
   }
   return { major: major!, minor: minor!, patch: patch! };
 }
@@ -31,7 +31,7 @@ function cmp(a: Semver, b: Semver): number {
   return a.major - b.major || a.minor - b.minor || a.patch - b.patch;
 }
 
-/** Wandelt ^/~/Wildcards in eine untere und (exklusive) obere Grenze um. */
+/** Converts ^/~/wildcards into a lower and an (exclusive) upper bound. */
 function bounds(range: string): { lower: Semver; upper: Semver | null; exact?: Semver } | null {
   const r = range.trim();
   if (r === "" || r === "*" || r === "x" || r === "X") {
@@ -52,7 +52,7 @@ function bounds(range: string): { lower: Semver; upper: Semver | null; exact?: S
   return null;
 }
 
-/** Prüft einen einzelnen Vergleichsoperator (>=, <=, >, <, =). */
+/** Checks a single comparison operator (>=, <=, >, <, =). */
 function satisfiesComparator(v: Semver, comparator: string): boolean {
   const m = comparator.match(/^(>=|<=|>|<|=)?\s*(.+)$/);
   if (!m) return false;
@@ -74,8 +74,8 @@ function satisfiesComparator(v: Semver, comparator: string): boolean {
 }
 
 /**
- * Erfüllt `version` die SemVer-Range? Unterstützt ^, ~, Wildcards, exakte
- * Versionen und mit Leerzeichen verknüpfte Komparatoren (UND); `||` als ODER.
+ * Does `version` satisfy the SemVer range? Supports ^, ~, wildcards, exact
+ * versions, and space-joined comparators (AND); `||` as OR.
  */
 export function satisfies(version: string, range: string): boolean {
   const v = parse(version);
@@ -87,7 +87,7 @@ export function satisfies(version: string, range: string): boolean {
       const okUpper = b.upper === null || cmp(v, b.upper) < 0;
       return okLower && okUpper;
     }
-    // Komparator-Set (durch Leerzeichen getrennt, alle müssen gelten)
+    // Comparator set (space-separated, all must hold)
     return trimmed
       .split(/\s+/)
       .filter(Boolean)
@@ -96,14 +96,14 @@ export function satisfies(version: string, range: string): boolean {
 }
 
 /**
- * Ist ein unter `writtenVersion` geschriebener Tree mit `supportedRange`
- * kompatibel? Das Studio deklariert `supportedSchemaVersions` als Range.
+ * Is a tree written under `writtenVersion` compatible with `supportedRange`?
+ * The Studio declares `supportedSchemaVersions` as a range.
  */
 export function isCompatible(writtenVersion: string, supportedRange: string): boolean {
   return satisfies(writtenVersion, supportedRange);
 }
 
-// --- Content-Migrationen (Gerüst) --------------------------------------------
+// --- Content migrations (scaffolding) ----------------------------------------
 
 export interface ContentMigration {
   from: string;
@@ -113,20 +113,20 @@ export interface ContentMigration {
 
 const migrations: ContentMigration[] = [];
 
-/** Registriert eine Migration zwischen zwei Contract-Versionen. */
+/** Registers a migration between two contract versions. */
 export function registerMigration(migration: ContentMigration): void {
   migrations.push(migration);
 }
 
-/** Nur für Tests: Migrations-Registry leeren. */
+/** Tests only: clears the migration registry. */
 export function _resetMigrations(): void {
   migrations.length = 0;
 }
 
 /**
- * Migriert Content auf `to` (Default: aktuelle SCHEMA_VERSION).
- * - gleiche Major-Version → strukturkompatibel, nur neu stempeln
- * - sonst → registrierte Migration anwenden oder mit Handlungsanweisung werfen
+ * Migrates content to `to` (default: current SCHEMA_VERSION).
+ * - same major version → structurally compatible, just re-stamp
+ * - otherwise → apply a registered migration or throw with a course of action
  */
 export function migrateContent(content: PageContent, to: string = SCHEMA_VERSION): PageContent {
   if (content.schemaVersion === to) return content;
@@ -143,7 +143,7 @@ export function migrateContent(content: PageContent, to: string = SCHEMA_VERSION
   }
 
   throw new Error(
-    `Keine Migration von schemaVersion ${content.schemaVersion} nach ${to} registriert. ` +
-      "Registriere eine Migration mit registerMigration() oder aktualisiere den Content im Studio.",
+    `No migration registered from schemaVersion ${content.schemaVersion} to ${to}. ` +
+      "Register a migration with registerMigration() or update the content in the Studio.",
   );
 }
