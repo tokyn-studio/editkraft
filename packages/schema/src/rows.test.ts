@@ -103,4 +103,14 @@ describe("ekPageRowSchema locale contract", () => {
   it("rejects a row without locale", () => {
     expect(() => ekPageRowSchema.parse(base)).toThrow();
   });
+
+  it("rejects a single-character locale", () => {
+    expect(() =>
+      ekPageRowSchema.parse({
+        ...base,
+        locale: "a",
+        translation_group_id: "5f0f6a3e-aaaa-4bbb-8ccc-444455556666",
+      }),
+    ).toThrow();
+  });
 });
