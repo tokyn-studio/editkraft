@@ -1,5 +1,55 @@
 # @editkraft/react
 
+## 0.5.0
+
+### Minor Changes
+
+- 9492038: Locale-aware rendering for the Roadmap 1.4 contract, plus English-first messages:
+
+  - `loadPublishedPage` accepts `locale` and `defaultLocale` in its options. With
+    `locale` set, the lookup is narrowed to that locale; if no published page exists
+    for it and `defaultLocale` differs, it falls back to `defaultLocale`. Without
+    either option, behavior is unchanged. The returned `PublishedPage` now includes
+    `locale`.
+  - New `getAlternateLocales(supabase, slug, locale?)` returns every published
+    translation of a page (siblings sharing `translation_group_id`) for building
+    `hreflang` alternates.
+  - New `getSitemapEntries(supabase)` returns every published page's slug, locale,
+    and last-updated timestamp across all locales, for building a sitemap.
+  - `EditkraftPageProps` gains `locale` and `defaultLocale`, forwarded to
+    `loadPublishedPage`. `EditkraftConfig` gains optional `locales` and
+    `defaultLocale` fields.
+  - All thrown/logged error messages in the data loader and `EditkraftPage` are now
+    in English (previously German).
+  - Restored two side effects the inline-editing refactor had silently dropped from
+    image-field selection: the `ek:focus-field` postMessage after an image-field
+    `ek:select`, and the `data-editkraft-selected` DOM attribute mirroring the
+    current selection. Both use the same imperative, non-re-rendering mechanism the
+    refactor introduced, so contentEditable fields still don't lose their cursor on
+    selection change.
+
+  > **Upgrade note:** `loadPublishedPage` now selects the `locale` and
+  > `translation_group_id` columns unconditionally. Apply the i18n migration
+  > (`*_editkraft_i18n.sql`, scaffolded by `npx editkraft init`) BEFORE
+  > upgrading this package, or every page load fails with a self-describing
+  > `CONTENT_INVALID` error (`column ek_pages.locale does not exist`).
+
+- 103a10f: Rich-text formatting, link editing and image tools in the live preview:
+
+  - Schema: rich-text allowlist extended by p/h2/h3/u/s; `ekImageValue.frame`
+    (non-destructive 1:1 framing) plus `imageFrameStyles()` as a shared render
+    helper for preview and published pages
+  - React: floating formatting toolbar (B/I/U/S, paragraph/H2/H3, links),
+    link popover (URL/mail/tel, button and inline links), image popover
+    (replace, crop/frame, AI-edit hook), all wired through the existing
+    postMessage bridge
+
+### Patch Changes
+
+- Updated dependencies [9492038]
+- Updated dependencies [103a10f]
+  - @editkraft/schema@0.4.0
+
 ## 0.4.0
 
 ### Minor Changes
