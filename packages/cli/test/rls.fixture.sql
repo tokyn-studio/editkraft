@@ -8,6 +8,29 @@
 
 begin;
 
+-- --- i18n contract (Roadmap 1.4) — applied so RLS tests run against the
+-- end state (locale + translation_group_id + unique(slug, locale)). --------
+alter table public.ek_pages
+  add column if not exists locale text not null default 'de';
+
+alter table public.ek_pages
+  add column if not exists translation_group_id uuid not null default gen_random_uuid();
+
+alter table public.ek_pages drop constraint if exists ek_pages_slug_key;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'ek_pages_slug_locale_key'
+  ) then
+    alter table public.ek_pages
+      add constraint ek_pages_slug_locale_key unique (slug, locale);
+  end if;
+end $$;
+
+create index if not exists ek_pages_translation_group_idx
+  on public.ek_pages (translation_group_id);
+
 -- --- Seed (als postgres/service, umgeht RLS) --------------------------------
 insert into public.ek_pages (id, slug, title, status) values
   ('00000000-0000-4000-8000-000000000d01', 'draft-page', 'Nur Draft', 'draft'),

@@ -18,6 +18,9 @@ export default {
   registry: "./blocks/registry",
   // Allowed Studio origin for the preview bridge (postMessage origin check)
   studioOrigin: process.env.NEXT_PUBLIC_EDITKRAFT_STUDIO_ORIGIN ?? "",
+  /** BCP-47 locales this site publishes. First entry pages are created in by default. */
+  locales: ["de"],
+  defaultLocale: "de",
 } satisfies EditkraftConfig;
 `;
 }

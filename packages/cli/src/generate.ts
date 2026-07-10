@@ -1,4 +1,4 @@
-import { migrationSql } from "./templates/migration";
+import { migrationSql, i18nMigration } from "./templates/migration";
 import {
   editkraftConfig,
   registryTs,
@@ -22,6 +22,9 @@ export interface GenerateOptions {
   timestamp: string;
 }
 
+/** Default locale for newly scaffolded projects (matches editkraftConfig()). */
+const DEFAULT_LOCALE = "de";
+
 /**
  * Generates all the files that `editkraft init` writes — pure and free of
  * side effects, so they can be snapshot-tested.
@@ -32,6 +35,12 @@ export function generateFiles(options: GenerateOptions): FileSpec[] {
     {
       path: `supabase/migrations/${options.timestamp}_editkraft_init.sql`,
       content: migrationSql(),
+    },
+    {
+      // Ships as a SECOND, separate migration so existing installations can
+      // apply the i18n contract independently of the init migration.
+      path: `supabase/migrations/${options.timestamp}_editkraft_i18n.sql`,
+      content: i18nMigration(DEFAULT_LOCALE),
     },
     { path: "editkraft.config.ts", content: editkraftConfig() },
     { path: `${base}blocks/registry.ts`, content: registryTs() },
