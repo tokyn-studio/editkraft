@@ -9,3 +9,8 @@ out/
 # lokale link:-Overrides dürfen nie eingecheckt werden
 *.local
 *.tsbuildinfo
+.env
+.env.*
+.vercel/
+.vercel
+.env*
