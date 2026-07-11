@@ -101,21 +101,28 @@ import { createClient } from "@supabase/supabase-js";
 import { loadDraftContent } from "@editkraft/react";
 import { verifyDraftToken } from "@editkraft/schema";
 import { PreviewClient } from "../preview-client";
+import editkraftConfig from "@/editkraft.config";
 
 /**
  * Preview route for the Studio. Accessed via a signed, short-lived
  * draft token (?token=…) instead of the Draft Mode cookie — this also works
  * in a cross-origin iframe. Loads draft content server-side (service key)
  * and passes only serializable content to the client wrapper.
+ *
+ * Reads an optional \`?locale=\` search param and passes it (plus this
+ * project's configured \`defaultLocale\`) to \`loadDraftContent\`. Without it,
+ * @editkraft/react 0.5.2+ still resolves deterministically instead of
+ * throwing once a slug has 2+ locale rows, but multi-locale sites should
+ * pass \`locale\` explicitly so the correct translation's draft is shown.
  */
 export default async function EditkraftPreviewPage({
   params,
   searchParams,
 }: {
   params: Promise<{ slug?: string[] }>;
-  searchParams: Promise<{ token?: string }>;
+  searchParams: Promise<{ token?: string; locale?: string }>;
 }) {
-  const { token } = await searchParams;
+  const { token, locale } = await searchParams;
   const secret = process.env.EDITKRAFT_PREVIEW_SECRET;
   if (!secret || !token || !(await verifyDraftToken(token, secret))) notFound();
 
@@ -126,7 +133,10 @@ export default async function EditkraftPreviewPage({
     { auth: { persistSession: false } },
   );
 
-  const page = await loadDraftContent(supabase, slug?.join("/") ?? "");
+  const page = await loadDraftContent(supabase, slug?.join("/") ?? "", {
+    ...(locale ? { locale } : {}),
+    ...(editkraftConfig.defaultLocale ? { defaultLocale: editkraftConfig.defaultLocale } : {}),
+  });
   if (!page) notFound();
 
   return (

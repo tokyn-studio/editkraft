@@ -280,7 +280,7 @@ describe("Bild-Feld", () => {
     fireEvent.click(libraryButton!);
 
     const messages = post.mock.calls.map(
-      (c) => c[0] as { channel?: string; type: string; blockId?: string; fieldKey?: string },
+      (c) => c[0] as { channel?: string; type: string; blockId?: string; fieldKey?: string; v?: number },
     );
     const libraryMessages = messages.filter((m) => m.type === "ek:library-open");
     // Protokoll-Konsistenz: alle Raw-Messages tragen v:1 wie ihre Geschwister.
