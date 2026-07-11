@@ -12,6 +12,7 @@ export {
   getSitemapEntries,
   type PublishedPage,
   type LoadOptions,
+  type DraftLoadOptions,
 } from "./data";
 export { updateBlockProps, findBlock } from "./tree";
 // EditkraftPreview ist eine Client-Komponente und wird über den Subpath
