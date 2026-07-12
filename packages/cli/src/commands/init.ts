@@ -92,8 +92,11 @@ export async function init(options: InitOptions): Promise<number> {
       `2. Set ENV (see ${pc.cyan(".env.editkraft.example")}):`,
       "   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, EDITKRAFT_REVALIDATE_SECRET,",
       "   NEXT_PUBLIC_EDITKRAFT_STUDIO_ORIGIN",
-      `3. Install ${pc.cyan("@editkraft/react @editkraft/schema zod")} and add blocks in blocks/registry.ts`,
-      `4. Check with  ${pc.cyan("npx editkraft doctor")}`,
+      `3. Install ${pc.cyan("@editkraft/react @editkraft/schema @supabase/supabase-js zod")} and add blocks in blocks/registry.ts`,
+      `   Every editable element needs ${pc.cyan('data-ek-field="<prop>"')} — see blocks/Hero.tsx`,
+      `4. i18n project (e.g. next-intl)? Move ${pc.cyan("app/[...slug]")} under your locale segment`,
+      `   and exclude ${pc.cyan("editkraft")} from your middleware matcher (Studio preview iframe).`,
+      `5. Check with  ${pc.cyan("npx editkraft doctor")}`,
     ].join("\n"),
     "Next steps",
   );

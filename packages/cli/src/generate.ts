@@ -4,6 +4,7 @@ import {
   editkraftConfig,
   registryTs,
   heroComponent,
+  renderRoute,
   revalidateRoute,
   previewRoute,
   previewClient,
@@ -70,6 +71,13 @@ export function generateFiles(options: GenerateOptions): FileSpec[] {
     {
       path: `${base}app/editkraft/preview/preview-client.tsx`,
       content: previewClient(),
+    },
+    {
+      // Public render route for published pages (catch-all; existing static
+      // routes win). i18n projects move it under their locale segment — the
+      // template's header comment explains how.
+      path: `${base}app/[...slug]/page.tsx`,
+      content: renderRoute(),
     },
     { path: ".env.editkraft.example", content: envExample() },
   ];

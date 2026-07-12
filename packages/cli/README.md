@@ -37,9 +37,16 @@ Scaffolds everything a Next.js App Router project needs to host Editkraft conten
   existing installations
 - `editkraft.config.ts` — registry path and allowed Studio origin.
 - `blocks/registry.ts` + `blocks/Hero.tsx` — an example block registry and component.
+  The Hero shows the **inline-editing contract**: every editable element carries
+  `data-ek-field="<propName>"` — without it a block renders but cannot be edited
+  in the Studio.
+- `app/[...slug]/page.tsx` — the public render route serving PUBLISHED pages
+  (catch-all; your static routes win). i18n projects move it under their locale
+  segment — the template's header comment explains how.
 - `app/api/editkraft/revalidate/route.ts` — the ISR revalidate webhook handler.
 - `app/editkraft/preview/[[...slug]]/page.tsx` + `preview-client.tsx` — the draft
-  preview route used by the Studio.
+  preview route used by the Studio. If your blocks need React context (next-intl,
+  themes), wrap the preview client with those providers.
 - `.env.editkraft.example` — the environment variables Editkraft needs.
 
 `init` is idempotent: it writes `created` for new files, `identical` for files whose

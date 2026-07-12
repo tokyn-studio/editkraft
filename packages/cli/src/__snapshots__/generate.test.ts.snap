@@ -13,7 +13,81 @@ EDITKRAFT_REVALIDATE_SECRET=
 # Shared secret for signed draft-preview tokens (Studio <-> customer site)
 EDITKRAFT_PREVIEW_SECRET=
 # Allowed Studio origin for the preview bridge
-NEXT_PUBLIC_EDITKRAFT_STUDIO_ORIGIN=https://studio.editkraft.dev
+NEXT_PUBLIC_EDITKRAFT_STUDIO_ORIGIN=https://studio.editkraft.com
+",
+  "app/[...slug]/page.tsx": "import type { Metadata } from "next";
+import { notFound } from "next/navigation";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { EditkraftPage, EditkraftError } from "@editkraft/react";
+import { registry } from "@/blocks/registry";
+import editkraftConfig from "@/editkraft.config";
+
+/**
+ * Public render route: serves PUBLISHED Editkraft pages under their slug.
+ * Reads with the anon/publishable key — Editkraft's RLS policies expose
+ * published content only, drafts stay protected.
+ *
+ * Catch-all semantics: your existing static routes always win; unknown
+ * paths fall through to this route and are looked up in Editkraft.
+ *
+ * i18n projects (e.g. next-intl with an app/[locale] segment): move this
+ * file to app/[locale]/[...slug]/page.tsx, take \`locale\` from params and
+ * pass it to <EditkraftPage locale={locale} …>. If your middleware uses a
+ * path matcher, exclude \`editkraft\` from it so the Studio preview iframe
+ * is not redirected.
+ */
+function publicClient(): SupabaseClient {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { auth: { persistSession: false } },
+  );
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string[] }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const slugPath = slug.join("/");
+  const { data: page } = await publicClient()
+    .from("ek_pages")
+    .select("title, meta")
+    .eq("slug", slugPath)
+    .eq("status", "published")
+    .maybeSingle();
+  if (!page) return {};
+  const meta = (page.meta ?? {}) as { description?: string };
+  return {
+    title: page.title,
+    ...(meta.description ? { description: meta.description } : {}),
+  };
+}
+
+export default async function EditkraftContentPage({
+  params,
+}: {
+  params: Promise<{ slug: string[] }>;
+}) {
+  const { slug } = await params;
+  try {
+    return await EditkraftPage({
+      supabase: publicClient(),
+      slug: slug.join("/"),
+      registry,
+      defaultLocale: editkraftConfig.defaultLocale,
+    });
+  } catch (error) {
+    if (error instanceof EditkraftError && error.code === "PAGE_NOT_FOUND") {
+      notFound();
+    }
+    throw error;
+  }
+}
+
+// For hreflang metadata across published locales, see getAlternateLocales
+// in the @editkraft/react README.
 ",
   "app/api/editkraft/revalidate/route.ts": "import { createRevalidateHandler } from "@editkraft/react";
 
@@ -86,6 +160,11 @@ import { registry } from "@/blocks/registry";
  * Client wrapper: imports the registry (with components) on the client side so
  * no functions cross the server→client boundary. The server
  * passes only serializable draft content.
+ *
+ * NOTE: this route lives OUTSIDE your app's usual layout segments. If your
+ * blocks wrap components that need React context (next-intl, theme providers,
+ * …), wrap <EditkraftPreview> with those providers here — otherwise the
+ * preview crashes silently and nothing is clickable in the Studio.
  */
 export function PreviewClient({
   content,
@@ -102,6 +181,12 @@ export function PreviewClient({
 /**
  * Example block. Adjust markup and styling to your design — props come
  * validated from the block definition in blocks/registry.ts.
+ *
+ * IMPORTANT: \`data-ek-field="<propName>"\` binds an element to its schema
+ * field. The Studio edits EXCLUSIVELY inline in the preview — text/richText
+ * fields become contenteditable, link fields get a link popover, image
+ * fields open the asset picker. A block without data-ek-field renders fine
+ * but cannot be edited. Add it to every editable element in your own blocks.
  */
 export function Hero({
   headline,
@@ -114,9 +199,17 @@ export function Hero({
 }) {
   return (
     <section>
-      <h1>{headline}</h1>
-      {image?.url ? <img src={image.url} alt={image.alt ?? ""} /> : null}
-      {cta ? <a href={cta.href}>{cta.label ?? cta.href}</a> : null}
+      <h1 data-ek-field="headline">{headline}</h1>
+      {image?.url ? (
+        <div data-ek-field="image">
+          <img src={image.url} alt={image.alt ?? ""} />
+        </div>
+      ) : null}
+      {cta ? (
+        <a data-ek-field="cta" href={cta.href}>
+          {cta.label ?? cta.href}
+        </a>
+      ) : null}
     </section>
   );
 }

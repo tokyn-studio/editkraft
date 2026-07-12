@@ -16,9 +16,27 @@ dependency on Editkraft infrastructure. Content belongs to the customer.
 ## Set up a customer project
 
 ```bash
-npx editkraft init      # migration, editkraft.config.ts, blocks/registry.ts, preview & revalidate route
+npx editkraft init      # migration, config, block registry, render/preview/revalidate routes
 npx editkraft doctor    # checks migration state, ENV, and registry consistency
 ```
+
+Then:
+
+1. `supabase db push` — apply the generated `ek_*` migration to YOUR Supabase project
+2. Install the runtime: `npm i @editkraft/react @editkraft/schema @supabase/supabase-js zod`
+3. Set the ENV from `.env.editkraft.example`
+4. Connect the site in the [Editkraft Studio](https://studio.editkraft.com): Supabase URL +
+   service key, then copy the three ENV lines the Studio shows you back into your project
+5. Publish a page in the Studio — the scaffolded catch-all route serves it immediately
+
+Two things bite every real-world project — the scaffold comments explain both:
+
+- **Inline editing contract:** every editable element in a block needs
+  `data-ek-field="<propName>"`. The Studio edits exclusively inline in the preview;
+  blocks without the attribute render but cannot be edited.
+- **i18n projects** (e.g. next-intl): move `app/[...slug]` under your locale segment and
+  exclude `editkraft` from your middleware matcher; if your components need React context
+  (translations, themes), provide it in `app/editkraft/preview/preview-client.tsx`.
 
 `init` is idempotent (overwrites nothing without `--force`) and creates an
 SQL migration with published-only RLS. The RLS guarantee ("anon only reads

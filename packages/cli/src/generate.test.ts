@@ -16,6 +16,7 @@ describe("generateFiles", () => {
       "app/api/editkraft/revalidate/route.ts",
       "app/editkraft/preview/[[...slug]]/page.tsx",
       "app/editkraft/preview/preview-client.tsx",
+      "app/[...slug]/page.tsx",
       ".env.editkraft.example",
     ]);
   });

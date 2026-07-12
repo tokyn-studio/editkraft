@@ -39,6 +39,32 @@ export const registry = createRegistry([
 `createRegistry` validates that every block type has both a definition (with a
 schema) and a component.
 
+## Inline editing: `data-ek-field`
+
+The Studio edits **exclusively inline** in the live preview — there is no
+property panel. A block opts its elements into editing with
+`data-ek-field="<propName>"`:
+
+```tsx
+export function Hero({ headline, cta }: { headline: string; cta?: EkLinkValue }) {
+  return (
+    <section>
+      <h1 data-ek-field="headline">{headline}</h1>
+      {cta ? <a data-ek-field="cta" href={cta.href}>{cta.label}</a> : null}
+    </section>
+  );
+}
+```
+
+- `text`/`richText` fields become contenteditable (richText gets a formatting
+  toolbar), `link` fields get a link popover, `image` fields open the asset picker.
+- A block **without** `data-ek-field` renders normally but cannot be edited —
+  the most common mistake when writing new blocks.
+- Repeating structures (card grids, rows) are modelled as a parent block with
+  `slots` plus child blocks — not as object arrays (`ekList` accepts primitive
+  lists only and is not inline-editable; prefer one `ekRichText` field for
+  paragraph lists).
+
 ## Rendering a page
 
 ```tsx
