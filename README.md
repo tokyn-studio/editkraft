@@ -42,6 +42,19 @@ Two things bite every real-world project — the scaffold comments explain both:
 SQL migration with published-only RLS. The RLS guarantee ("anon only reads
 published content") is tested as a SQL fixture: `packages/cli/test/rls.fixture.sql`.
 
+## Migrating an existing site
+
+Editkraft is built for existing sites: your pages become block compositions
+that wrap your own components — pixel-identical, in every language — and are
+seeded into your Supabase **before** you connect the Studio, so everything is
+editable the moment the site is added there.
+
+This step is executed by your coding agent (Claude Code, Cursor, …) against
+a battle-tested playbook: **[`docs/MIGRATE.md`](docs/MIGRATE.md)**. Point your
+agent at it right after `init`:
+
+> Follow docs/MIGRATE.md from the editkraft repo to migrate this site.
+
 ## Development
 
 ```bash
