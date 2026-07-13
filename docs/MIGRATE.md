@@ -10,6 +10,12 @@ Run it right after `npx editkraft init` — it does NOT require the Studio
 connection: content is seeded into the customer's own Supabase with the local
 service key. Connect the Studio afterwards and start editing immediately.
 
+For deployed sites the order is strict: **deploy the migrated code (with the
+Supabase ENV already set in the hosting project) → connect the site in the
+Studio → set the three Studio secrets in the hosting project → redeploy.**
+Connecting before the code is deployed leaves the Studio pointing at a site
+without the preview route — the editor then shows the site's 404 page.
+
 ## The contract (non-negotiable rules)
 
 1. **Blocks wrap the site's existing components.** Never rebuild markup —

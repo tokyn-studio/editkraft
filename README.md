@@ -24,10 +24,17 @@ Then:
 
 1. `supabase db push` — apply the generated `ek_*` migration to YOUR Supabase project
 2. Install the runtime: `npm i @editkraft/react @editkraft/schema @supabase/supabase-js zod`
-3. Set the ENV from `.env.editkraft.example`
+3. Set the Supabase ENV from `.env.editkraft.example` (locally AND in your hosting
+   project) and **deploy** — the Editkraft routes must be live before the Studio
+   can preview anything
 4. Connect the site in the [Editkraft Studio](https://studio.editkraft.com): Supabase URL +
-   service key, then copy the three ENV lines the Studio shows you back into your project
-5. Publish a page in the Studio — the scaffolded catch-all route serves it immediately
+   service key, and your deployed URL as preview URL
+5. Copy the three ENV lines the Studio shows you into your project — locally AND in
+   your hosting project — and **redeploy** (env values apply per deployment)
+6. Publish a page in the Studio — the scaffolded catch-all route serves it immediately
+
+Order matters for deployed sites: **deploy the code → connect → set secrets →
+redeploy**. On localhost, "deploy" is just restarting the dev server.
 
 Two things bite every real-world project — the scaffold comments explain both:
 
