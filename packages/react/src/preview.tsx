@@ -20,6 +20,7 @@ import {
   type Block,
   type EkFieldKind,
   type EkImageFrame,
+  type EkSelectOption,
   type PageContent,
 } from "@editkraft/schema";
 import type { Registry } from "./registry";
@@ -107,6 +108,8 @@ export function EditkraftPreview({
     italic: boolean;
     underline: boolean;
     strike: boolean;
+    ul: boolean;
+    ol: boolean;
     block: string;
   } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -131,6 +134,16 @@ export function EditkraftPreview({
   const linkElRef = useRef<HTMLAnchorElement | null>(null);
   const popoverOpenRef = useRef(false);
   const [pages, setPages] = useState<{ slug: string; title: string }[]>([]);
+
+  // Options-Popover für select-Felder (strikte Enums, z. B. Icon-Schlüssel).
+  const [selectPopover, setSelectPopover] = useState<{
+    blockId: string;
+    fieldKey: string;
+    top: number;
+    left: number;
+    options: EkSelectOption[];
+    current: string;
+  } | null>(null);
 
   // Bild-Bearbeiten-Popover (Austausch per URL / Datei / Drag&Drop, Alt-Text).
   const [imagePopover, setImagePopover] = useState<{
@@ -291,6 +304,8 @@ export function EditkraftPreview({
       italic: q("italic"),
       underline: q("underline"),
       strike: q("strikeThrough"),
+      ul: q("insertUnorderedList"),
+      ol: q("insertOrderedList"),
       block,
     };
     setFmt((prev) =>
@@ -299,13 +314,16 @@ export function EditkraftPreview({
       prev.italic === next.italic &&
       prev.underline === next.underline &&
       prev.strike === next.strike &&
+      prev.ul === next.ul &&
+      prev.ol === next.ol &&
       prev.block === next.block
         ? prev
         : next,
     );
   };
   refreshRef.current = refreshToolbar;
-  popoverOpenRef.current = linkPopover !== null || imagePopover !== null || cropMode !== null;
+  popoverOpenRef.current =
+    linkPopover !== null || selectPopover !== null || imagePopover !== null || cropMode !== null;
 
   const sendUpdateDebounced = (blockId: string, fieldKey: string, value: string) => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -404,6 +422,17 @@ export function EditkraftPreview({
       postToStudio(createMessage("ek:focus-field", { blockId, fieldKey }), studioOrigin);
       const imgEl = (el.querySelector?.<HTMLElement>("img") as HTMLElement | null) ?? el;
       openImagePopover(blockId, fieldKey, imgEl);
+      return;
+    }
+
+    // (C) Klick auf ein select-Feld: Options-Popover öffnen (kein contenteditable –
+    // Enum-Werte werden ausschließlich über das Popover geändert).
+    if (kind === "select") {
+      e.stopPropagation();
+      setSelectedId(blockId);
+      postToStudio(createMessage("ek:select", { blockId }), studioOrigin);
+      postToStudio(createMessage("ek:focus-field", { blockId, fieldKey }), studioOrigin);
+      openSelectPopover(blockId, fieldKey, el);
     }
   };
 
@@ -506,10 +535,10 @@ export function EditkraftPreview({
       return;
     }
 
-    if (command === "p" || command === "h2" || command === "h3") {
+    if (command === "p" || command === "h2" || command === "h3" || command === "blockquote") {
       document.execCommand("formatBlock", false, `<${command}>`);
     } else {
-      // bold | italic | underline | strikethrough
+      // bold | italic | underline | strikethrough | insertUnorderedList | insertOrderedList
       document.execCommand(command);
     }
 
@@ -657,6 +686,38 @@ export function EditkraftPreview({
       pushFieldUpdate(lp.blockId, lp.fieldKey);
     }
     closeLinkPopover();
+  };
+
+  // --- Select-Popover (Enum-Felder: Options-Liste statt contenteditable) ----
+  const openSelectPopover = (blockId: string, fieldKey: string, el: HTMLElement) => {
+    const type = blockTypeOf(blockId);
+    const field = type
+      ? registry.get(type)?.definition.fields.find((f) => f.key === fieldKey)
+      : undefined;
+    if (!field || field.kind !== "select" || field.options.length === 0) return;
+    const current = String(findBlockById(blockId)?.props?.[fieldKey] ?? "");
+    const rect = el.getBoundingClientRect();
+    setSelectPopover({
+      blockId,
+      fieldKey,
+      top: rect.bottom + 8,
+      left: Math.max(6, rect.left),
+      options: field.options,
+      current,
+    });
+  };
+
+  const closeSelectPopover = () => setSelectPopover(null);
+
+  // Option übernehmen: lokal setzen + SOFORT (ohne Debounce) an das Studio melden –
+  // gleiches Muster wie saveLink für cta-Felder.
+  const applySelectOption = (value: string) => {
+    const sp = selectPopover;
+    if (!sp) return;
+    const props = { [sp.fieldKey]: value };
+    setTree((cur) => updateBlockProps(cur, sp.blockId, props));
+    postToStudio(createMessage("ek:update", { blockId: sp.blockId, props }), studioOrigin);
+    closeSelectPopover();
   };
 
   // --- Bild-Popover (URL / Datei-Upload / Drag&Drop) ------------------------
@@ -1135,6 +1196,81 @@ export function EditkraftPreview({
     );
   };
 
+  const renderSelectPopover = (): ReactNode => {
+    const sp = selectPopover;
+    if (!sp) return null;
+    return createElement(
+      "div",
+      {
+        "data-editkraft-select-popover": "true",
+        style: {
+          position: "fixed",
+          top: sp.top,
+          left: sp.left,
+          zIndex: 2147483647,
+          width: 220,
+          display: "flex",
+          flexDirection: "column" as const,
+          gap: 8,
+          padding: 10,
+          background: "#1A1C1F",
+          border: "1px solid #2E3138",
+          borderRadius: 12,
+          boxShadow: "0 12px 34px -8px rgba(0,0,0,0.6)",
+          fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif",
+        },
+      },
+      createElement(
+        "div",
+        {
+          key: "options",
+          style: { display: "flex", flexDirection: "column" as const, gap: 2, maxHeight: 220, overflowY: "auto" as const },
+        },
+        ...sp.options.map((opt) =>
+          createElement(
+            "button",
+            {
+              type: "button",
+              key: opt.value,
+              onMouseDown: (e: { preventDefault: () => void }) => e.preventDefault(),
+              onClick: () => applySelectOption(opt.value),
+              style: {
+                textAlign: "left" as const,
+                padding: "6px 9px",
+                borderRadius: 6,
+                border: "none",
+                background: sp.current === opt.value ? "rgba(245,166,35,0.16)" : "transparent",
+                color: sp.current === opt.value ? "#FFB020" : "#A5A8B0",
+                cursor: "pointer",
+                fontSize: 13,
+              },
+            },
+            opt.label ?? opt.value,
+          ),
+        ),
+      ),
+      createElement(
+        "button",
+        {
+          key: "cancel",
+          type: "button",
+          onMouseDown: (e: { preventDefault: () => void }) => e.preventDefault(),
+          onClick: closeSelectPopover,
+          style: {
+            padding: "7px 10px",
+            borderRadius: 7,
+            border: "1px solid #2E3138",
+            background: "transparent",
+            color: "#A5A8B0",
+            cursor: "pointer",
+            fontSize: 13,
+          },
+        },
+        "Cancel",
+      ),
+    );
+  };
+
   const renderImagePopover = (): ReactNode => {
     const ip = imagePopover;
     if (!ip) return null;
@@ -1555,11 +1691,31 @@ export function EditkraftPreview({
             style: { textDecoration: "line-through" },
           }),
           divider(),
+          fmtButton({
+            label: "UL",
+            title: "Bullet list",
+            active: !!fmt?.ul,
+            onClick: () => applyFormat("insertUnorderedList"),
+          }),
+          fmtButton({
+            label: "OL",
+            title: "Numbered list",
+            active: !!fmt?.ol,
+            onClick: () => applyFormat("insertOrderedList"),
+          }),
+          fmtButton({
+            label: "❝",
+            title: "Quote",
+            active: fmt?.block === "blockquote",
+            onClick: () => applyFormat("blockquote"),
+          }),
+          divider(),
           fmtButton({ label: linkIcon, title: "Link", active: !!linkPopover, onClick: () => applyFormat("link") }),
         )
       : null,
     ),
     renderLinkPopover(),
+    renderSelectPopover(),
     renderImagePopover(),
     renderCropOverlay(),
   );

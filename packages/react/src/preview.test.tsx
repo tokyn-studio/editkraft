@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { act } from "react";
 import { render, screen, fireEvent, cleanup, waitFor } from "@testing-library/react";
 import { z } from "zod";
-import { defineBlock, ekText, ekRichText, ekImage, createMessage, type PageContent } from "@editkraft/schema";
+import { defineBlock, ekText, ekRichText, ekImage, ekSelect, createMessage, type PageContent } from "@editkraft/schema";
 import { createRegistry } from "./registry";
 import { EditkraftPreview } from "./preview";
 
@@ -20,11 +20,22 @@ function Prose({ body }: { body: string }) {
 function Banner({ image }: { image: { url?: string; alt?: string } }) {
   return <div data-ek-field="image"><img src={image?.url ?? ""} alt={image?.alt ?? ""} /></div>;
 }
+function Icon({ icon }: { icon: string }) {
+  return <span data-ek-field="icon">{icon}</span>;
+}
 const registry = createRegistry([
   { definition: defineBlock({ type: "Hero", label: "Hero", schema: z.object({ headline: ekText() }) }), component: Hero },
   { definition: defineBlock({ type: "Text", label: "Text", schema: z.object({ body: ekText() }) }), component: Text },
   { definition: defineBlock({ type: "Prose", label: "Prosa", schema: z.object({ body: ekRichText() }) }), component: Prose },
   { definition: defineBlock({ type: "Banner", label: "Banner", schema: z.object({ image: ekImage() }) }), component: Banner },
+  {
+    definition: defineBlock({
+      type: "Icon",
+      label: "Icon",
+      schema: z.object({ icon: ekSelect({ options: [{ value: "bolt", label: "Blitz" }, { value: "star" }] }) }),
+    }),
+    component: Icon,
+  },
 ]);
 
 const content: PageContent = {
@@ -34,6 +45,7 @@ const content: PageContent = {
     { id: "b2", type: "Text", props: { body: "Zweiter" } },
     { id: "b3", type: "Prose", props: { body: "<strong>fett</strong> normal" } },
     { id: "b4", type: "Banner", props: { image: { assetId: "", url: "" } } },
+    { id: "b5", type: "Icon", props: { icon: "bolt" } },
   ],
 };
 
@@ -221,6 +233,98 @@ describe("RichText-Mini-Toolbar", () => {
     expect(upd?.blockId).toBe("b3");
     post.mockRestore();
     vi.useRealTimers();
+  });
+
+  it("zeigt die Listen- und Zitat-Buttons bei fokussiertem richText-Feld", () => {
+    const { container } = render(<EditkraftPreview content={content} registry={registry} studioOrigin={STUDIO} />);
+    const el = fieldEl(container, "b3", "body");
+    act(() => {
+      el.focus();
+      el.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      const sel = window.getSelection()!;
+      sel.removeAllRanges();
+      sel.addRange(range);
+      document.dispatchEvent(new Event("selectionchange"));
+    });
+    expect(container.querySelector('[data-editkraft-toolbar] button[title="Bullet list"]')).toBeTruthy();
+    expect(container.querySelector('[data-editkraft-toolbar] button[title="Numbered list"]')).toBeTruthy();
+    expect(container.querySelector('[data-editkraft-toolbar] button[title="Quote"]')).toBeTruthy();
+  });
+
+  it("UL/OL/Zitat-Buttons feuern die richtigen Editor-Kommandos", () => {
+    vi.useFakeTimers();
+    const { container } = render(<EditkraftPreview content={content} registry={registry} studioOrigin={STUDIO} />);
+    const el = fieldEl(container, "b3", "body");
+    act(() => {
+      el.focus();
+      el.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      const sel = window.getSelection()!;
+      sel.removeAllRanges();
+      sel.addRange(range);
+      document.dispatchEvent(new Event("selectionchange"));
+    });
+    const exec = vi.spyOn(document, "execCommand");
+    const click = (title: string) => {
+      const btn = container.querySelector(`[data-editkraft-toolbar] button[title="${title}"]`) as HTMLElement;
+      expect(btn).toBeTruthy();
+      act(() => {
+        fireEvent.click(btn);
+      });
+    };
+    click("Bullet list");
+    expect(exec).toHaveBeenCalledWith("insertUnorderedList");
+    click("Numbered list");
+    expect(exec).toHaveBeenCalledWith("insertOrderedList");
+    click("Quote");
+    expect(exec).toHaveBeenCalledWith("formatBlock", false, "<blockquote>");
+    exec.mockRestore();
+    vi.useRealTimers();
+  });
+});
+
+describe("Select-Feld", () => {
+  it("ist nicht contentEditable", () => {
+    const { container } = render(<EditkraftPreview content={content} registry={registry} studioOrigin={STUDIO} />);
+    expect(fieldEl(container, "b5", "icon").getAttribute("contenteditable")).toBeNull();
+  });
+
+  it("Klick öffnet das Options-Popover mit allen Options (Label bzw. Wert)", () => {
+    const { container } = render(<EditkraftPreview content={content} registry={registry} studioOrigin={STUDIO} />);
+    fireEvent.click(fieldEl(container, "b5", "icon"));
+    const popover = container.querySelector("[data-editkraft-select-popover]");
+    expect(popover).toBeTruthy();
+    const labels = Array.from(popover!.querySelectorAll("button")).map((b) => b.textContent);
+    expect(labels).toContain("Blitz"); // Option mit Label
+    expect(labels).toContain("star"); // Option ohne Label → Wert
+  });
+
+  it("Klick auf eine Option sendet SOFORT ek:update mit dem Wert und schließt das Popover", () => {
+    const post = vi.spyOn(window.parent, "postMessage");
+    const { container } = render(<EditkraftPreview content={content} registry={registry} studioOrigin={STUDIO} />);
+    fireEvent.click(fieldEl(container, "b5", "icon"));
+    post.mockClear();
+
+    const option = Array.from(
+      container.querySelectorAll<HTMLButtonElement>("[data-editkraft-select-popover] button"),
+    ).find((b) => b.textContent === "star");
+    expect(option).toBeTruthy();
+    fireEvent.click(option!);
+
+    // Ohne Debounce: das Update liegt direkt nach dem Klick vor.
+    const upd = post.mock.calls
+      .map((c) => c[0] as { type: string; blockId?: string; props?: Record<string, unknown> })
+      .find((x) => x.type === "ek:update");
+    expect(upd?.blockId).toBe("b5");
+    expect(upd?.props?.icon).toBe("star");
+    expect(post.mock.calls[0]![1]).toBe(STUDIO);
+    // Popover ist geschlossen, der neue Wert lokal gerendert.
+    expect(container.querySelector("[data-editkraft-select-popover]")).toBeNull();
+    expect(fieldEl(container, "b5", "icon").textContent).toBe("star");
+    post.mockRestore();
   });
 });
 

@@ -57,13 +57,61 @@ export function Hero({ headline, cta }: { headline: string; cta?: EkLinkValue })
 ```
 
 - `text`/`richText` fields become contenteditable (richText gets a formatting
-  toolbar), `link` fields get a link popover, `image` fields open the asset picker.
+  toolbar), `link` fields get a link popover, `image` fields open the asset
+  picker, `select` fields open an options popover (see below).
+- richText supports headings, bold/italic/underline/strikethrough, links and —
+  via the toolbar — bullet/numbered lists and blockquotes. The sanitizer also
+  keeps `code`, `br`, `hr` and `target="_blank"` on links (with enforced
+  `rel="noopener noreferrer"`); everything else is stripped.
 - A block **without** `data-ek-field` renders normally but cannot be edited —
   the most common mistake when writing new blocks.
 - Repeating structures (card grids, rows) are modelled as a parent block with
   `slots` plus child blocks — not as object arrays (`ekList` accepts primitive
   lists only and is not inline-editable; prefer one `ekRichText` field for
   paragraph lists).
+
+## Select fields: `ekSelect`
+
+`ekSelect` models a strict choice from fixed values (icon keys, layout
+variants, …). In the preview, clicking the element opens an options popover —
+no free-text editing. Rendering the value stays in the block; always keep a
+fallback for unknown values:
+
+```tsx
+import { defineBlock, ekSelect, ekText } from "@editkraft/schema";
+import { z } from "zod";
+
+const featureDefinition = defineBlock({
+  type: "Feature",
+  label: "Feature",
+  schema: z.object({
+    icon: ekSelect({
+      label: "Icon",
+      options: [
+        { value: "bolt", label: "Lightning" },
+        { value: "shield", label: "Shield" },
+        { value: "star" }, // label optional — the popover shows the value
+      ],
+    }),
+    title: ekText({ label: "Title" }),
+  }),
+});
+
+const icons: Record<string, ReactNode> = { bolt: <BoltIcon />, shield: <ShieldIcon />, star: <StarIcon /> };
+
+export function Feature({ icon, title }: { icon: string; title: string }) {
+  return (
+    <div>
+      {/* Fallback rendering: unknown key → default icon instead of a crash */}
+      <span data-ek-field="icon">{icons[icon] ?? <StarIcon />}</span>
+      <h3 data-ek-field="title">{title}</h3>
+    </div>
+  );
+}
+```
+
+Validation is a strict enum over the option values; selecting an option in the
+preview writes the value immediately (no debounce).
 
 ## Rendering a page
 
