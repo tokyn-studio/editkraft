@@ -256,6 +256,11 @@ import { registry } from "@/blocks/registry";
  * blocks wrap components that need React context (next-intl, theme providers,
  * …), wrap <EditkraftPreview> with those providers here — otherwise the
  * preview crashes silently and nothing is clickable in the Studio.
+ *
+ * TIP: to show your site chrome (header/footer from a route-group layout)
+ * around the preview, render it here wrapped in a container with
+ * className="pointer-events-none" — visible for context, but its links must
+ * not navigate the Studio iframe away.
  */
 export function PreviewClient({
   content,

@@ -42,6 +42,11 @@ without the preview route — the editor then shows the site's 404 page.
    app's layout segments — wrap `<EditkraftPreview>` in
    `app/editkraft/preview/preview-client.tsx` with whatever providers the
    blocks need (next-intl, theme, …), or editing fails silently.
+6. **Preview should show the site chrome.** Header/footer usually live in a
+   route-group layout (`(site)/layout.tsx`) that the preview route does not
+   inherit. Render them in the preview page around the content, wrapped in a
+   `pointer-events-none` container — visible for editing context, but link
+   clicks must not navigate the iframe away.
 
 ## The process
 
