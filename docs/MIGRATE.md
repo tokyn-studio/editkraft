@@ -56,12 +56,20 @@ service key. Connect the Studio afterwards and start editing immediately.
    `ek_pages` row per locale (shared `translation_group_id`) plus one
    `ek_page_versions` row. Use stable block ids (no randomness). Status
    stays `draft` — publishing is a human decision.
+   **Assets:** upload images used by migrated pages into the `ek-assets`
+   storage bucket and insert matching `ek_assets` rows — only then can the
+   Studio's asset picker manage them. Reference them in `ekImage` props as
+   `{ assetId, url }`. Add the Supabase hostname to `next/image`
+   `remotePatterns`. Site-wide statics (logo, favicons, OG images) stay in
+   `public/`.
 6. **Verify before cutover.** Render the preview route with a signed token
    (`createDraftToken`) and compare against the live page. Publish (set
    `published_version_id` + `status`) only when it matches.
 7. **Cut over one page at a time.** Replace the static route with the
    Editkraft render route (root pages and routes with special metadata keep
    a thin code wrapper that renders `<EditkraftPage>` with a fixed slug).
+   Place the catch-all inside the route group / layout segment that carries
+   the site chrome (header, footer), so CMS pages inherit it.
    Deploy, then diff the live page against the baseline: extracted text must
    be identical, screenshots must match. Keep the old page components in the
    repo until the diff is proven — rollback is then a one-commit revert.
@@ -85,3 +93,12 @@ Forms, interactive tools, live widgets, data-driven collections (blog
 listings, search, generated pages). They stay code. A page whose flow mixes
 content sections with interactive code sections needs "code-slot" support —
 not available yet; leave such pages as code and say so in your report.
+
+Also keep in code (for now) and report as "stays code":
+
+- **Site globals** (contact data, claim, footer lines living in a settings
+  module) — Editkraft has no Studio management for them yet.
+- **Icon/variant keys**: there is no select primitive; if a key must be
+  editable, use `ekText` and render a safe fallback for unknown values.
+- **Legal-style rich content** needing headings/lists beyond the sanitizer
+  allowlist — either a block-local sanitizer or keep the existing format.
