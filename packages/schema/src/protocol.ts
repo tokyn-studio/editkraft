@@ -62,7 +62,7 @@ export type BlockSchemaDescriptor = {
 
 const blockFieldDescriptorSchema = z
   .object({
-    kind: z.enum(["text", "richText", "image", "link", "color", "list", "reference"]),
+    kind: z.enum(["text", "richText", "image", "link", "color", "select", "list", "reference"]),
     key: z.string(),
     optional: z.boolean(),
   })

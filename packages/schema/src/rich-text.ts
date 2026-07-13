@@ -14,11 +14,21 @@ export const RICH_TEXT_ALLOWLIST = {
   em: [],
   u: [],
   s: [],
-  a: ["href"],
+  a: ["href", "target"],
   p: [],
   h2: [],
   h3: [],
+  ul: [],
+  ol: [],
+  li: [],
+  blockquote: [],
+  code: [],
+  br: [],
+  hr: [],
 } as const;
+
+/** Void-Tags: werden ohne Schließtag neu aufgebaut (kein open-Stack-Eintrag). */
+const VOID_TAGS = new Set(["br", "hr"]);
 
 const TAG_ALIASES: Record<string, string> = {
   b: "strong",
@@ -44,11 +54,12 @@ function escapeAttr(s: string): string {
     .replace(/>/g, "&gt;");
 }
 
-function extractHref(attrs: string): string | null {
-  const m = /\bhref\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(attrs);
+function extractAttr(attrs: string, name: string): string | null {
+  const re = new RegExp(`\\b${name}\\s*=\\s*("([^"]*)"|'([^']*)'|([^\\s>]+))`, "i");
+  const m = re.exec(attrs);
   if (!m) return null;
-  const href = m[2] || m[3] || m[4];
-  return href || null;
+  const value = m[2] || m[3] || m[4];
+  return value || null;
 }
 
 export function sanitizeRichText(input: string): string {
@@ -73,6 +84,8 @@ export function sanitizeRichText(input: string): string {
     if (!(name in RICH_TEXT_ALLOWLIST)) continue; // unbekanntes Tag: droppen, Text bleibt
 
     if (isClose) {
+      // Schließende Void-Tags (</br>) sind ungültig und werden verworfen.
+      if (VOID_TAGS.has(name)) continue;
       const idx = open.lastIndexOf(name);
       if (idx !== -1) {
         out += `</${name}>`;
@@ -81,10 +94,21 @@ export function sanitizeRichText(input: string): string {
       continue;
     }
 
+    if (VOID_TAGS.has(name)) {
+      out += `<${name}>`;
+      continue;
+    }
+
     if (name === "a") {
-      const href = extractHref(m[2]!);
+      const href = extractAttr(m[2]!, "href");
       if (href && SAFE_HREF.test(href)) {
-        out += `<a href="${escapeAttr(href)}">`;
+        // target überlebt NUR als "_blank" — und erzwingt dann
+        // rel="noopener noreferrer". Ein geliefertes rel wird ignoriert:
+        // Attribute werden neu aufgebaut, nie durchgereicht.
+        const target = extractAttr(m[2]!, "target");
+        const targetAttrs =
+          target?.toLowerCase() === "_blank" ? ` target="_blank" rel="noopener noreferrer"` : "";
+        out += `<a href="${escapeAttr(href)}"${targetAttrs}>`;
         open.push("a");
       }
       // ungültiger/fehlender href: Link-Wrapper droppen, Text bleibt

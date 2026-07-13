@@ -6,6 +6,7 @@ import {
   ekImage,
   ekLink,
   ekColor,
+  ekSelect,
   ekList,
   ekReference,
   getFieldMeta,
@@ -87,5 +88,27 @@ describe("Feld-Primitives: Validierung", () => {
 
   it("ekList lehnt Nicht-Primitive-Items ab", () => {
     expect(() => ekList(z.string())).toThrowError(/Editkraft primitive/);
+  });
+});
+
+describe("ekSelect", () => {
+  it("validiert strikt gegen die Options-Werte", () => {
+    const field = ekSelect({ options: [{ value: "heart" }, { value: "sprout", label: "Pflanze" }] });
+    expect(field.safeParse("heart").success).toBe(true);
+    expect(field.safeParse("rocket").success).toBe(false);
+  });
+
+  it("traegt kind select + Options in die Feld-Metadaten (auch durch .optional())", () => {
+    const field = ekSelect({ label: "Icon", options: [{ value: "a" }, { value: "b" }] }).optional();
+    expect(getFieldMeta(field)).toEqual({
+      kind: "select",
+      label: "Icon",
+      options: [{ value: "a" }, { value: "b" }],
+    });
+  });
+
+  it("wirft bei leeren oder doppelten Options", () => {
+    expect(() => ekSelect({ options: [] })).toThrow(/must not be empty/);
+    expect(() => ekSelect({ options: [{ value: "x" }, { value: "x" }] })).toThrow(/unique/);
   });
 });

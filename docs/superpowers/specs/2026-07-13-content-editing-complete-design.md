@@ -36,11 +36,12 @@ Das Studio ändert sich nur für Teil 3.
 Buttons. KEINE Buttons für `code`/`hr` (v1: Inhalte bleiben erhalten und
 editierbar; `br` entsteht nativ per Shift+Enter).
 
-**Contract:** `SCHEMA_VERSION` → `0.5.0` (muss mit packages/schema
-package.json übereinstimmen — Kommentar im Code beachten). Alte Renderer
-strippen unbekannte Tags beim Sanitizen (graceful degradation, kein Crash).
-`@editkraft/react` hebt sein `supportedSchemaRange` an, sodass 0.5-Bäume
-akzeptiert werden.
+**Contract (Korrektur während der Implementierung):** `SCHEMA_VERSION`
+bleibt `0.1.0` — das Baum-FORMAT ändert sich nicht (richText ist ein String,
+Select-Werte sind Strings). Ein Bump würde jeden ausgelieferten Renderer hart
+brechen (Default-Range hängt an `majorOf(SCHEMA_VERSION)`), obwohl alte
+Renderer neue Tags ohnehin nur sanft strippen. Es steigen ausschließlich die
+npm-Paketversionen (schema 0.5.0, react 0.6.0).
 
 ## Teil 2: `ekSelect`
 

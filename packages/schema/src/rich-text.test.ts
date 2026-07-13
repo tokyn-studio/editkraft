@@ -54,6 +54,44 @@ describe("sanitizeRichText", () => {
   });
 
   it("Allowlist ist stabil", () => {
-    expect(Object.keys(RICH_TEXT_ALLOWLIST).sort()).toEqual(["a", "em", "h2", "h3", "p", "s", "strong", "u"]);
+    expect(Object.keys(RICH_TEXT_ALLOWLIST).sort()).toEqual([
+      "a", "blockquote", "br", "code", "em", "h2", "h3", "hr", "li", "ol", "p", "s", "strong", "u", "ul",
+    ]);
+  });
+
+  // --- Erweiterung 0.5.0: Listen, Void-Tags, code/blockquote, a[target] ---
+
+  it("erlaubt Listen (ul/ol/li)", () => {
+    const html = "<ul><li>eins</li><li>zwei</li></ul><ol><li>drei</li></ol>";
+    expect(sanitizeRichText(html)).toBe(html);
+  });
+
+  it("erlaubt blockquote und code", () => {
+    const html = "<blockquote><p>Zitat</p></blockquote><p><code>x = 1</code></p>";
+    expect(sanitizeRichText(html)).toBe(html);
+  });
+
+  it("baut br/hr als Void-Tags neu auf (auch self-closing), ohne Schliesstag", () => {
+    expect(sanitizeRichText("a<br>b<br/>c<hr>")).toBe("a<br>b<br>c<hr>");
+  });
+
+  it("verwirft schliessende Void-Tags (</br>)", () => {
+    expect(sanitizeRichText("a</br>b")).toBe("ab");
+  });
+
+  it("a mit target=_blank erzwingt rel=noopener noreferrer", () => {
+    expect(sanitizeRichText('<a href="https://x.de" target="_blank" rel="evil">t</a>')).toBe(
+      '<a href="https://x.de" target="_blank" rel="noopener noreferrer">t</a>',
+    );
+  });
+
+  it("a mit anderem target verliert das target", () => {
+    expect(sanitizeRichText('<a href="/a" target="_parent">t</a>')).toBe('<a href="/a">t</a>');
+  });
+
+  it("bleibt idempotent mit den neuen Tags", () => {
+    const dirty = '<ul><li>a<br>b</li></ul><a href="https://x.de" target="_blank">l</a><hr>';
+    const once = sanitizeRichText(dirty);
+    expect(sanitizeRichText(once)).toBe(once);
   });
 });

@@ -17,8 +17,11 @@ export type EkFieldKind =
   | "image"
   | "link"
   | "color"
+  | "select"
   | "list"
   | "reference";
+
+export type EkSelectOption = { value: string; label?: string };
 
 export type EkFieldMeta =
   | { kind: "text"; label?: string; multiline?: boolean }
@@ -26,6 +29,7 @@ export type EkFieldMeta =
   | { kind: "image"; label?: string }
   | { kind: "link"; label?: string }
   | { kind: "color"; label?: string }
+  | { kind: "select"; label?: string; options: EkSelectOption[] }
   | { kind: "list"; label?: string; item: EkFieldMeta }
   | { kind: "reference"; label?: string; to: string };
 
@@ -154,6 +158,27 @@ export function ekColor(config: { label?: string } = {}) {
       message: "Color must be hex (#rrggbb) or a token name",
     }),
     { kind: "color", ...config },
+  );
+}
+
+/**
+ * Strikte Auswahl aus festen Werten (z. B. Icon-Schlüssel, Layout-Varianten).
+ * Die Preview zeigt dafür ein Options-Popover statt contenteditable — Blöcke
+ * rendern den Wert selbst (mit Fallback für unbekannte Werte empfohlen).
+ */
+export function ekSelect(config: { options: EkSelectOption[]; label?: string }) {
+  if (!config.options.length) {
+    throw new Error("ekSelect: options must not be empty");
+  }
+  const values = config.options.map((o) => o.value);
+  if (new Set(values).size !== values.length) {
+    throw new Error("ekSelect: option values must be unique");
+  }
+  return tag(
+    z.string().refine((v) => values.includes(v), {
+      message: `Value must be one of: ${values.join(", ")}`,
+    }),
+    { kind: "select", options: config.options, ...(config.label ? { label: config.label } : {}) },
   );
 }
 
