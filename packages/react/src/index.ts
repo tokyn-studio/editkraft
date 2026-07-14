@@ -1,6 +1,13 @@
 // Public API des Renderers (@editkraft/react).
 
-export { createRegistry, type Registry, type RegistryEntry, type BlockComponentProps } from "./registry";
+export {
+  createRegistry,
+  type BlockComponentProps,
+  type CollectionRegistryEntry,
+  type Registry,
+  type RegistryEntry,
+  type RegistryInput,
+} from "./registry";
 export { renderBlocks, type RenderOptions } from "./render";
 export { EditkraftPage, type EditkraftPageProps } from "./page";
 export {
@@ -9,6 +16,8 @@ export {
   loadGlobals,
   loadDraftGlobals,
   defaultSupportedRange,
+  getCollection,
+  getCollectionItem,
   pageTag,
   globalsTag,
   getAlternateLocales,
@@ -16,6 +25,9 @@ export {
   type PublishedPage,
   type LoadOptions,
   type DraftLoadOptions,
+  type CollectionItem,
+  type CollectionItemOptions,
+  type CollectionListOptions,
 } from "./data";
 export { updateBlockProps, findBlock } from "./tree";
 // EditkraftPreview ist eine Client-Komponente und wird über den Subpath

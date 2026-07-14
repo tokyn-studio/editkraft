@@ -2,7 +2,18 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { act } from "react";
 import { render, screen, fireEvent, cleanup, waitFor } from "@testing-library/react";
 import { z } from "zod";
-import { defineBlock, defineGlobals, ekText, ekRichText, ekImage, ekSelect, createMessage, type PageContent } from "@editkraft/schema";
+import {
+  createMessage,
+  defineBlock,
+  defineCollection,
+  defineGlobals,
+  ekImage,
+  ekRichText,
+  ekSelect,
+  ekText,
+  itemToBlock,
+  type PageContent,
+} from "@editkraft/schema";
 import { createRegistry } from "./registry";
 import { EditkraftPreview } from "./preview";
 
@@ -520,5 +531,119 @@ describe("Site-Globals", () => {
       el.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
     });
     await waitFor(() => expect(globalEl(container, "phone").textContent).toBe("0800 7"));
+  });
+});
+
+// --- Item-Modus (Collections): synthetischer Ein-Block-Baum ------------------
+// Die Preview-Seite baut den Baum via itemToBlock und übergibt ihn als ganz
+// normales `content` — EditkraftPreview braucht keinen eigenen Item-Pfad, weil
+// die Registry jede Collection als synthetischen Block registriert.
+
+function ArticleTemplate({ item }: { item: { title: string; body: string } }) {
+  return (
+    <article>
+      <h1 data-ek-field="title">{item.title}</h1>
+      <div data-ek-field="body" dangerouslySetInnerHTML={{ __html: item.body }} />
+    </article>
+  );
+}
+
+const blogDef = defineCollection({
+  slug: "blog",
+  name: "Blog",
+  schema: z.object({ title: ekText({ label: "Titel" }), body: ekRichText({ label: "Body" }) }),
+});
+
+const itemRegistry = createRegistry([
+  { definition: defineBlock({ type: "Hero", label: "Hero", schema: z.object({ headline: ekText() }) }), component: Hero },
+  { collection: blogDef, template: ArticleTemplate },
+]);
+
+const itemContent: PageContent = {
+  schemaVersion: "0.1.0",
+  blocks: [itemToBlock("blog", "item-1", { title: "Hallo Welt", body: "<p>Erster <strong>Beitrag</strong></p>" })],
+};
+
+describe("EditkraftPreview — Item-Modus (Collections)", () => {
+  it("rendert das registrierte Template für den synthetischen $collection-Block", () => {
+    const { container } = render(
+      <EditkraftPreview content={itemContent} registry={itemRegistry} studioOrigin={STUDIO} />,
+    );
+    expect(screen.getByText("Hallo Welt")).toBeTruthy();
+    expect(container.querySelector("article strong")?.textContent).toBe("Beitrag");
+    // Der Block-Wrapper trägt die itemId als blockId (Studio adressiert damit).
+    expect(container.querySelector('[data-editkraft-block-id="item-1"]')).toBeTruthy();
+  });
+
+  it("sendet ek:schema inkl. der Collection-Feld-Deskriptoren", () => {
+    const post = vi.spyOn(window.parent, "postMessage");
+    render(<EditkraftPreview content={itemContent} registry={itemRegistry} studioOrigin={STUDIO} />);
+    const schema = post.mock.calls
+      .map((c) => c[0] as { type: string; blocks?: { type: string; fields?: unknown }[] })
+      .find((m) => m.type === "ek:schema");
+    const collectionDescriptor = schema?.blocks?.find((b) => b.type === "$collection:blog");
+    expect(collectionDescriptor).toBeTruthy();
+    expect(collectionDescriptor!.fields).toEqual(blogDef.fields);
+    post.mockRestore();
+  });
+
+  it("macht data-ek-field-Felder des Templates editierbar (text + richText)", () => {
+    const { container } = render(
+      <EditkraftPreview content={itemContent} registry={itemRegistry} studioOrigin={STUDIO} />,
+    );
+    expect(fieldEl(container, "item-1", "title").getAttribute("contenteditable")).toBe("true");
+    expect(fieldEl(container, "item-1", "body").getAttribute("contenteditable")).toBe("true");
+  });
+
+  it("Klick/Fokus in ein Feld meldet ek:focus-field, Tippen sendet ek:update mit den Feldwerten", () => {
+    vi.useFakeTimers();
+    const post = vi.spyOn(window.parent, "postMessage");
+    const { container } = render(
+      <EditkraftPreview content={itemContent} registry={itemRegistry} studioOrigin={STUDIO} />,
+    );
+    const el = fieldEl(container, "item-1", "title");
+    post.mockClear();
+    act(() => {
+      el.focus();
+      el.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+      el.textContent = "Neuer Titel";
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      vi.advanceTimersByTime(400);
+    });
+    const messages = post.mock.calls.map(
+      (c) => c[0] as { type: string; blockId?: string; fieldKey?: string; props?: Record<string, unknown> },
+    );
+    const focus = messages.find((m) => m.type === "ek:focus-field");
+    expect(focus?.blockId).toBe("item-1");
+    expect(focus?.fieldKey).toBe("title");
+    const upd = messages.find((m) => m.type === "ek:update");
+    expect(upd?.blockId).toBe("item-1");
+    expect(upd?.props?.title).toBe("Neuer Titel");
+    post.mockRestore();
+    vi.useRealTimers();
+  });
+
+  it("ek:update aus dem Studio aktualisiert das Template live", async () => {
+    render(<EditkraftPreview content={itemContent} registry={itemRegistry} studioOrigin={STUDIO} />);
+    dispatchFromStudio(createMessage("ek:update", { blockId: "item-1", props: { title: "Live geändert" } }));
+    await waitFor(() => expect(screen.getByText("Live geändert")).toBeTruthy());
+  });
+
+  it("Fokus in das richText-Feld des Templates zeigt die Format-Toolbar", () => {
+    const { container } = render(
+      <EditkraftPreview content={itemContent} registry={itemRegistry} studioOrigin={STUDIO} />,
+    );
+    const el = fieldEl(container, "item-1", "body");
+    act(() => {
+      el.focus();
+      el.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      const sel = window.getSelection()!;
+      sel.removeAllRanges();
+      sel.addRange(range);
+      document.dispatchEvent(new Event("selectionchange"));
+    });
+    expect(container.querySelector("[data-editkraft-toolbar]")).toBeTruthy();
   });
 });

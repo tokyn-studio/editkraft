@@ -102,7 +102,7 @@ export const POST = createRevalidateHandler({
   "app/editkraft/preview/[[...slug]]/page.tsx": "import { notFound } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 import { loadDraftContent } from "@editkraft/react";
-import { verifyDraftToken } from "@editkraft/schema";
+import { SCHEMA_VERSION, itemToBlock, verifyDraftToken } from "@editkraft/schema";
 import { PreviewClient } from "../preview-client";
 import editkraftConfig from "@/editkraft.config";
 
@@ -117,15 +117,19 @@ import editkraftConfig from "@/editkraft.config";
  * @editkraft/react 0.5.2+ still resolves deterministically instead of
  * throwing once a slug has 2+ locale rows, but multi-locale sites should
  * pass \`locale\` explicitly so the correct translation's draft is shown.
+ *
+ * Collection items (\`?collection=blog&item=<slug>\`): loads the DRAFT item
+ * and frames it as a synthetic one-block tree — the registered collection
+ * template renders it and the whole inline-editing bridge works unchanged.
  */
 export default async function EditkraftPreviewPage({
   params,
   searchParams,
 }: {
   params: Promise<{ slug?: string[] }>;
-  searchParams: Promise<{ token?: string; locale?: string }>;
+  searchParams: Promise<{ token?: string; locale?: string; collection?: string; item?: string }>;
 }) {
-  const { token, locale } = await searchParams;
+  const { token, locale, collection, item } = await searchParams;
   const secret = process.env.EDITKRAFT_PREVIEW_SECRET;
   if (!secret || !token || !(await verifyDraftToken(token, secret))) notFound();
 
@@ -136,6 +140,34 @@ export default async function EditkraftPreviewPage({
     { auth: { persistSession: false } },
   );
 
+  const studioOrigin = process.env.NEXT_PUBLIC_EDITKRAFT_STUDIO_ORIGIN ?? "";
+
+  if (collection && item) {
+    const { data: col } = await supabase
+      .from("ek_collections")
+      .select("id")
+      .eq("slug", collection)
+      .maybeSingle();
+    if (!col) notFound();
+
+    let query = supabase
+      .from("ek_collection_items")
+      .select("id, draft_data")
+      .eq("collection_id", col.id)
+      .eq("slug", item);
+    query = locale
+      ? query.eq("locale", locale)
+      : query.order("locale", { ascending: true }).limit(1);
+    const { data: row } = await query.maybeSingle();
+    if (!row) notFound();
+
+    const content = {
+      schemaVersion: SCHEMA_VERSION,
+      blocks: [itemToBlock(collection, row.id as string, row.draft_data as Record<string, unknown>)],
+    };
+    return <PreviewClient content={content} studioOrigin={studioOrigin} />;
+  }
+
   const page = await loadDraftContent(supabase, slug?.join("/") ?? "", {
     ...(locale ? { locale } : {}),
     ...(editkraftConfig.defaultLocale ? { defaultLocale: editkraftConfig.defaultLocale } : {}),
@@ -145,7 +177,7 @@ export default async function EditkraftPreviewPage({
   return (
     <PreviewClient
       content={page.content}
-      studioOrigin={process.env.NEXT_PUBLIC_EDITKRAFT_STUDIO_ORIGIN ?? ""}
+      studioOrigin={studioOrigin}
     />
   );
 }
@@ -466,6 +498,76 @@ alter table public.ek_symbols enable row level security;
 -- Schreiben/Lesen nur Service-Role. Die Published-Lese-Policy kommt mit V2.
 revoke all on public.ek_symbols from anon, authenticated;
 grant all on public.ek_symbols to service_role;
+",
+  "supabase/migrations/20260101000004_editkraft_collections.sql": "-- Editkraft collections (Roadmap 2.8): structured item lists (blog, …).
+-- Additive; safe to run on existing installations.
+
+-- ---------------------------------------------------------------------------
+-- ek_collections (collection definitions; the schema is not a secret)
+-- ---------------------------------------------------------------------------
+create table if not exists public.ek_collections (
+  id uuid primary key default gen_random_uuid(),
+  slug text not null unique,
+  name text not null,
+  item_schema jsonb not null,
+  created_at timestamptz not null default now()
+);
+
+-- ---------------------------------------------------------------------------
+-- ek_collection_items (draft/publish as snapshot: published_data;
+-- null = never published — no per-item version log in v1)
+-- ---------------------------------------------------------------------------
+create table if not exists public.ek_collection_items (
+  id uuid primary key default gen_random_uuid(),
+  collection_id uuid not null references public.ek_collections (id) on delete cascade,
+  slug text not null,
+  locale text not null default 'de',
+  translation_group_id uuid not null default gen_random_uuid(),
+  draft_data jsonb not null,
+  published_data jsonb,
+  published_at timestamptz,
+  sort_order integer,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (collection_id, slug, locale)
+);
+
+create index if not exists ek_collection_items_collection_id_idx
+  on public.ek_collection_items (collection_id);
+
+create index if not exists ek_collection_items_translation_group_idx
+  on public.ek_collection_items (translation_group_id);
+
+-- updated_at trigger, same mechanism as ek_pages (ek_set_updated_at is
+-- created by the init migration, which always applies before this one).
+drop trigger if exists ek_collection_items_set_updated_at on public.ek_collection_items;
+create trigger ek_collection_items_set_updated_at before update on public.ek_collection_items
+  for each row execute function public.ek_set_updated_at();
+
+-- ---------------------------------------------------------------------------
+-- RLS: anon/authenticated read the collection definitions and ONLY published
+-- items. Writes & draft reads go through service_role (bypasses RLS).
+-- ---------------------------------------------------------------------------
+alter table public.ek_collections enable row level security;
+alter table public.ek_collection_items enable row level security;
+
+grant select on public.ek_collections to anon, authenticated;
+grant select on public.ek_collection_items to anon, authenticated;
+
+grant all on public.ek_collections to service_role;
+grant all on public.ek_collection_items to service_role;
+
+drop policy if exists "ek public reads collections" on public.ek_collections;
+create policy "ek public reads collections"
+  on public.ek_collections for select
+  to anon, authenticated
+  using (true);
+
+drop policy if exists "ek public reads published collection items" on public.ek_collection_items;
+create policy "ek public reads published collection items"
+  on public.ek_collection_items for select
+  to anon, authenticated
+  using (published_data is not null);
 ",
 }
 `;

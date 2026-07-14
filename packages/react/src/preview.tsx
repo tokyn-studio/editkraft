@@ -112,6 +112,19 @@ function PreviewBlocks({
  *  - legt Klick-Overlays über registrierte Blöcke (Klick → ek:select),
  *  - empfängt ek:update (Live-Prop-Update) und ek:select (Auswahl setzen),
  *    jeweils nach Origin-Check gegen studioOrigin.
+ *
+ * Item-Modus (Collections, Roadmap 2.8) — Entscheidung: KEINE eigenen Props
+ * (`collection`/`itemId`) und kein zweiter Render-Pfad. Die Preview-SEITE baut
+ * per `itemToBlock(slug, itemId, draftData)` einen synthetischen Ein-Block-Baum
+ * (`type = "$collection:<slug>"`, `blockId = itemId`) und übergibt ihn als
+ * ganz normales `content`. Die Registry registriert jede Collection intern als
+ * synthetischen Block unter genau diesem Typ (siehe createRegistry), wodurch
+ * hier ALLES unverändert funktioniert: `registry.get()` liefert das Template
+ * (samt Collection-Zod-Schema), `fieldKindOf` liest die Collection-Feld-
+ * Deskriptoren, `registry.descriptors()` sendet sie in ek:schema mit, und
+ * contenteditable/Toolbar/Popover/ek:update laufen über die bestehende Bridge.
+ * Das ist die minimal-invasive Variante: null Sonderfälle in dieser Datei,
+ * das Studio sieht eine „Seite mit einem Block".
  */
 export function EditkraftPreview({
   content,

@@ -1,0 +1,72 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`scanProject: exported object arrays > erkennt ein gleichförmiges exportiertes Objekt-Array (Snapshot) 1`] = `
+{
+  "exportName": "posts",
+  "itemCount": 3,
+  "path": "data/posts.ts",
+  "suggestedSchema": [
+    {
+      "key": "cover",
+      "optional": false,
+      "primitive": "ekImage",
+    },
+    {
+      "key": "date",
+      "optional": false,
+      "primitive": "ekText",
+    },
+    {
+      "key": "href",
+      "optional": false,
+      "primitive": "ekLink",
+    },
+    {
+      "key": "title",
+      "optional": false,
+      "primitive": "ekText",
+    },
+    {
+      "key": "views",
+      "optional": false,
+      "primitive": "ekText",
+    },
+  ],
+  "type": "object-array",
+}
+`;
+
+exports[`scanProject: frontmatter directories > erkennt einen mdx-Ordner mit >= 3 Frontmatter-Dateien (Snapshot) 1`] = `
+{
+  "itemCount": 3,
+  "path": "content/blog",
+  "suggestedSchema": [
+    {
+      "key": "title",
+      "optional": false,
+      "primitive": "ekText",
+    },
+    {
+      "key": "date",
+      "optional": false,
+      "primitive": "ekText",
+    },
+    {
+      "key": "image",
+      "optional": false,
+      "primitive": "ekImage",
+    },
+    {
+      "key": "source",
+      "optional": true,
+      "primitive": "ekLink",
+    },
+    {
+      "key": "body",
+      "optional": false,
+      "primitive": "ekRichText",
+    },
+  ],
+  "type": "frontmatter-dir",
+}
+`;

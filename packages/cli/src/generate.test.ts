@@ -13,6 +13,7 @@ describe("generateFiles", () => {
       // Two seconds after init, sorts (and applies) after i18n.
       "supabase/migrations/20260101000002_editkraft_globals.sql",
       "supabase/migrations/20260101000003_editkraft_symbols.sql",
+      "supabase/migrations/20260101000004_editkraft_collections.sql",
       "editkraft.config.ts",
       "blocks/registry.ts",
       "blocks/Hero.tsx",
@@ -96,6 +97,27 @@ describe("generateFiles", () => {
     expect(globals!.content).not.toMatch(/grant select \([^)]*draft/);
     // Die Einzelzeile wird direkt angelegt (Upsert-Ziel für das Studio):
     expect(globals!.content).toContain("insert into public.ek_globals (id) values (1)");
+  });
+
+  it("emits the collections migration as a fifth, separate file", () => {
+    const files = generateFiles({ timestamp: "20260710120000", srcDir: false });
+    const collections = files.find(
+      (f) => f.path === "supabase/migrations/20260710120004_editkraft_collections.sql",
+    );
+    expect(collections).toBeDefined();
+    expect(collections!.content).toContain("create table if not exists public.ek_collections");
+    expect(collections!.content).toContain("create table if not exists public.ek_collection_items");
+    expect(collections!.content).toContain("unique (collection_id, slug, locale)");
+    // published-only RLS via the snapshot column:
+    expect(collections!.content).toContain("using (published_data is not null)");
+    expect(collections!.content).toContain("enable row level security");
+    // No write grants for anon/authenticated:
+    expect(collections!.content).not.toMatch(/grant (insert|update|delete).*anon/i);
+    // updated_at trigger reuses the init migration's function:
+    expect(collections!.content).toContain("execute function public.ek_set_updated_at()");
+    // Filename sort (the real-world apply order) keeps init < i18n < collections:
+    const migrations = files.map((f) => f.path).filter((p) => p.startsWith("supabase/"));
+    expect([...migrations].sort()).toEqual(migrations);
   });
 
   it("Preview-Route nutzt Draft-Token statt Draft-Mode-Cookie", () => {
