@@ -647,3 +647,23 @@ describe("EditkraftPreview — Item-Modus (Collections)", () => {
     expect(container.querySelector("[data-editkraft-toolbar]")).toBeTruthy();
   });
 });
+
+describe("Eingehendes ek:tree (Struktur-Edits aus dem Studio)", () => {
+  it("ersetzt den Baum und rendert die neue Struktur", async () => {
+    const { container } = render(
+      <EditkraftPreview content={content} registry={registry} studioOrigin={STUDIO} />,
+    );
+    const next: PageContent = {
+      schemaVersion: "0.1.0",
+      blocks: [
+        { id: "b2", type: "Hero", props: { headline: "Neu eingefügt" } },
+        ...content.blocks,
+      ],
+    };
+    dispatchFromStudio(createMessage("ek:tree", { content: next }));
+    await waitFor(() => expect(screen.getByText("Neu eingefügt")).toBeTruthy());
+    expect(container.querySelectorAll("[data-editkraft-block-id]").length).toBeGreaterThanOrEqual(
+      next.blocks.length,
+    );
+  });
+});

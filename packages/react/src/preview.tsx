@@ -270,6 +270,14 @@ export function EditkraftPreview({
       if (!isAllowedOrigin(event.origin, studioOrigin)) return;
       const message = parseMessage(event.data);
       if (!message) return;
+      if (message.type === "ek:tree") {
+        // Struktur-Edits aus dem Studio (Blockliste: einfügen/löschen/
+        // verschieben): kompletten Baum ersetzen — Live-Canvas ohne Reload.
+        // Kein Echo-Guard nötig: Struktur-Ops passieren nie während des
+        // Tippens in einem Feld (das Studio sendet sie nur aus dem Panel).
+        setTree(message.content);
+        return;
+      }
       if (message.type === "ek:update") {
         const focused = focusedRef.current;
         let props = message.props;
