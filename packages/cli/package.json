@@ -1,6 +1,6 @@
 {
   "name": "editkraft",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Editkraft-CLI: init & doctor für Next.js-Projekte mit Supabase",
   "license": "MIT",
   "type": "module",
