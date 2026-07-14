@@ -144,3 +144,56 @@ react ≥ 0.7; `npx editkraft init` ships the `ek_globals` migration — run
 
 Editing one occurrence (e.g. the phone number in the contact section) updates
 every occurrence — contact section and footer can never drift again.
+## Collections & blog
+
+Data-driven collections (blog listings, generated detail pages) are the one
+exception to "data-driven collections stay code": since Roadmap 2.8 they
+migrate into `ek_collections` / `ek_collection_items` instead of `ek_pages`.
+An item is **structured fields plus exactly one `ekRichText` body** — not a
+block tree. Draft/publish is a snapshot (`published_data`); anon only ever
+sees published items.
+
+The process, per collection:
+
+1. **Scan.** Run `npx editkraft scan --json`. It reports candidates: folders
+   with 3+ frontmatter `.md`/`.mdx` files and exported uniform object arrays,
+   each with a suggested field schema, item count, and a locale guess. The
+   report is a starting point, not a verdict — verify the suggested primitives
+   against the real content (dates are suggested as `ekText` until a date
+   primitive exists).
+2. **Define the collection.** `defineCollection({ slug, name, schema })` with
+   ek-primitives only, exactly like block props. Model the markdown body as
+   ONE `ekRichText` field (conventionally `body`). Insert the collection row
+   (`slug`, `name`, serialized `item_schema`) with the service key — the
+   seed script can do this idempotently (`on conflict (slug) do nothing`).
+3. **Push the migration.** `editkraft init` (re-run is idempotent) writes
+   `supabase/migrations/<ts+2s>_editkraft_collections.sql`; apply it with
+   `supabase db push`. It is additive and safe on existing installations.
+4. **Seed the items.** One idempotent script: frontmatter keys → field
+   values, the markdown body → richText **HTML** restricted to the
+   `sanitizeRichText`-compatible subset (`strong/em/u/s/a[href]/p/h2/h3`) —
+   convert or drop anything else (tables, code blocks, images-in-body) and
+   report it. One `ek_collection_items` row per locale, same `slug`, shared
+   `translation_group_id`; write `draft_data` only — publishing stays a
+   human decision. Use stable slugs (from filenames), set `sort_order` where
+   the source has an explicit order. Upload referenced images to `ek-assets`
+   and reference them as `{ assetId, url }`, exactly as in step 5 of the page
+   process.
+5. **Register the item template.** Add the collection to `createRegistry`
+   with `{ collection, template }`. The template receives `{ item }` and must
+   put `data-ek-field="<fieldName>"` on every editable element — same
+   contract as blocks; a field without the attribute renders but cannot be
+   edited inline.
+6. **Cut the blog routes over.** Listing page: replace the filesystem/array
+   read with `getCollection(supabase, "blog", { locale })`. Detail page:
+   `getCollectionItem(supabase, "blog", slug, { locale })`, render through
+   the registered template, keep `generateStaticParams`/metadata working from
+   the item data. Both helpers return published items only — drafts appear
+   exclusively in the Studio preview.
+7. **Verify.** Diff every blog page (listing + each detail page, every
+   locale) against the baseline from step 2 of the page process: extracted
+   text identical, screenshots matching. Keep the old data source in the repo
+   until the diff is proven — rollback stays a one-commit revert.
+
+Out of scope in v1 (report, don't force): taxonomies/categories, scheduled
+publishing, per-item version history, cross-item search.

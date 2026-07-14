@@ -248,5 +248,91 @@ create policy "ek public reads published globals"
   using (published is not null);
 
 insert into public.ek_globals (id) values (1) on conflict (id) do nothing;
+ * Collections migration (Roadmap 2.8): `ek_collections` + `ek_collection_items`
+ * for structured, repeatable content (blog posts, …). Ships as a separate
+ * migration so existing installations can apply it independently.
+ *
+ * Draft/publish is a SNAPSHOT model (`published_data`), not a version log:
+ * anon sees only rows whose `published_data is not null` — the policy exposes
+ * exactly the published view. All writes go through service_role (bypasses RLS).
+ *
+ * Additive and idempotent: `if not exists` / `drop policy if exists` guards,
+ * safe to run on existing installations and safe to re-run.
+ */
+export function collectionsMigration(defaultLocale: string): string {
+  if (!/^[A-Za-z0-9-]+$/.test(defaultLocale)) {
+    throw new Error(
+      `Invalid defaultLocale "${defaultLocale}": must match /^[A-Za-z0-9-]+$/ (it is interpolated into SQL).`,
+    );
+  }
+  return `-- Editkraft collections (Roadmap 2.8): structured item lists (blog, …).
+-- Additive; safe to run on existing installations.
+
+-- ---------------------------------------------------------------------------
+-- ek_collections (collection definitions; the schema is not a secret)
+-- ---------------------------------------------------------------------------
+create table if not exists public.ek_collections (
+  id uuid primary key default gen_random_uuid(),
+  slug text not null unique,
+  name text not null,
+  item_schema jsonb not null,
+  created_at timestamptz not null default now()
+);
+
+-- ---------------------------------------------------------------------------
+-- ek_collection_items (draft/publish as snapshot: published_data;
+-- null = never published — no per-item version log in v1)
+-- ---------------------------------------------------------------------------
+create table if not exists public.ek_collection_items (
+  id uuid primary key default gen_random_uuid(),
+  collection_id uuid not null references public.ek_collections (id) on delete cascade,
+  slug text not null,
+  locale text not null default '${defaultLocale}',
+  translation_group_id uuid not null default gen_random_uuid(),
+  draft_data jsonb not null,
+  published_data jsonb,
+  published_at timestamptz,
+  sort_order integer,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (collection_id, slug, locale)
+);
+
+create index if not exists ek_collection_items_collection_id_idx
+  on public.ek_collection_items (collection_id);
+
+create index if not exists ek_collection_items_translation_group_idx
+  on public.ek_collection_items (translation_group_id);
+
+-- updated_at trigger, same mechanism as ek_pages (ek_set_updated_at is
+-- created by the init migration, which always applies before this one).
+drop trigger if exists ek_collection_items_set_updated_at on public.ek_collection_items;
+create trigger ek_collection_items_set_updated_at before update on public.ek_collection_items
+  for each row execute function public.ek_set_updated_at();
+
+-- ---------------------------------------------------------------------------
+-- RLS: anon/authenticated read the collection definitions and ONLY published
+-- items. Writes & draft reads go through service_role (bypasses RLS).
+-- ---------------------------------------------------------------------------
+alter table public.ek_collections enable row level security;
+alter table public.ek_collection_items enable row level security;
+
+grant select on public.ek_collections to anon, authenticated;
+grant select on public.ek_collection_items to anon, authenticated;
+
+grant all on public.ek_collections to service_role;
+grant all on public.ek_collection_items to service_role;
+
+drop policy if exists "ek public reads collections" on public.ek_collections;
+create policy "ek public reads collections"
+  on public.ek_collections for select
+  to anon, authenticated
+  using (true);
+
+drop policy if exists "ek public reads published collection items" on public.ek_collection_items;
+create policy "ek public reads published collection items"
+  on public.ek_collection_items for select
+  to anon, authenticated
+  using (published_data is not null);
 `;
 }
