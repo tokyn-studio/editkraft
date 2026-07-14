@@ -107,9 +107,40 @@ not available yet; leave such pages as code and say so in your report.
 
 Also keep in code (for now) and report as "stays code":
 
-- **Site globals** (contact data, claim, footer lines living in a settings
-  module) — Editkraft has no Studio management for them yet.
 - **Icon/variant keys**: there is no select primitive; if a key must be
   editable, use `ekText` and render a safe fallback for unknown values.
 - **Legal-style rich content** needing headings/lists beyond the sanitizer
   allowlist — either a block-local sanitizer or keep the existing format.
+
+## Site globals (contact data, claim, footer lines)
+
+Values from a settings module (`settings.ts`) that appear in blocks AND in the
+site chrome (header/footer) migrate to **Site globals** (schema ≥ 0.6 /
+react ≥ 0.7; `npx editkraft init` ships the `ek_globals` migration — run
+`supabase db push`):
+
+1. **Define** them once, with the existing primitives:
+   ```ts
+   // src/blocks/globals.ts
+   export const globals = defineGlobals({
+     schema: z.object({
+       phone: ekText({ label: "Telefon" }),
+       claim: ekText({ label: "Claim" }),
+     }),
+   });
+   ```
+2. **Load with code fallback** — the settings module stays as the default, so
+   the site renders even before anything is published (or if the table is
+   missing): `const values = (await loadGlobals(supabase, globals)) ?? settings;`
+   Wrap in React `cache()` to dedupe per request.
+3. **Render**: pass `values` as the `globals` option to
+   `renderBlocks`/`EditkraftPage` (blocks receive a `globals` prop) and as a
+   plain prop to chrome components (header/footer, loaded in the layout).
+4. **Mark editable occurrences** with `data-ek-global="<key>"` — the exact
+   `data-ek-field` pattern, but for globals (kind `text`/`richText`).
+5. **Preview route**: load `loadDraftGlobals(serviceClient, globals)` and pass
+   `globals={{ definition: globals, values: draft ?? settings }}` to
+   `EditkraftPreview`. Publishing in the Studio then goes live site-wide.
+
+Editing one occurrence (e.g. the phone number in the contact section) updates
+every occurrence — contact section and footer can never drift again.

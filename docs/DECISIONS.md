@@ -125,6 +125,19 @@ idempotent) wird von Renderer und Editor geteilt. `ek:update` ist bidirektional;
 fokussierte Feld ist uncontrolled – eingehendes `ek:update` überschreibt es nicht, der
 finale Wert wird erst bei Blur in den State übernommen.
 
+## ADR-019: Site-Globals als Einzelzeilen-Tabelle mit Spalten-GRANT
+Site-weite Inhalte (`defineGlobals`) leben in `ek_globals`: genau eine Zeile
+(`id = 1` per CHECK), `draft`/`published` als jsonb — bewusst OHNE
+Versionstabelle (Stammdaten, Historie ist YAGNI). Weil RLS nur Zeilen filtert,
+schützt der Draft ein Spalten-GRANT: anon/authenticated bekommen `select` nur
+auf `id, published, updated_at` (Supabase-Default-Privileges werden in der
+Migration explizit zurückgenommen); Loader selektieren deshalb immer explizite
+Spalten. Deskriptoren + Draft-Werte fließen zur Laufzeit über die Bridge
+(`ek:globals`/`ek:global-update`, additiv — alte Gegenstellen parsen sie zu
+`null`), nie über einen Seed-Kanal: die Definition im Kundencode ist die
+einzige Quelle. Nicht lokalisiert in v1 (V2: `locale`-Spalte analog
+`ek_pages`).
+
 ## Offene TODOs (Nicht-Ziele dieses Repos, bewusst verschoben)
 - Playwright-Browser-Smoke der Example-App (aktuell: Integrationstest + Next-Build).
 - Overlays für tief verschachtelte Slots (aktuell: Klick-Overlay je Block, rekursiv).

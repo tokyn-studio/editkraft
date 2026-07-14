@@ -183,3 +183,44 @@ create index if not exists ek_pages_translation_group_idx
   on public.ek_pages (translation_group_id);
 `;
 }
+
+/**
+ * Dritte Migration: Site-Globals (`ek_globals`). Additiv und idempotent —
+ * Bestandsinstallationen holen sie unabhängig von init/i18n nach.
+ *
+ * Sicherheitsmodell (ADR-009-Prinzip): Der Draft darf NIE öffentlich lesbar
+ * sein. RLS filtert nur Zeilen, keine Spalten — deshalb zusätzlich ein
+ * Spalten-GRANT: anon/authenticated sehen nur id/published/updated_at.
+ * Supabase-Default-Privileges werden vorher explizit zurückgenommen.
+ */
+export function globalsMigration(): string {
+  return `-- Editkraft Site-Globals: eine Zeile pro Site, draft/published getrennt.
+-- Additive; safe to run on existing installations.
+
+create table if not exists public.ek_globals (
+  id smallint primary key default 1 check (id = 1),
+  draft jsonb,
+  published jsonb,
+  updated_at timestamptz not null default now()
+);
+
+drop trigger if exists ek_globals_set_updated_at on public.ek_globals;
+create trigger ek_globals_set_updated_at before update on public.ek_globals
+  for each row execute function public.ek_set_updated_at();
+
+alter table public.ek_globals enable row level security;
+
+-- Draft nie öffentlich: Spalten-GRANT statt Zeilen-Policy allein.
+revoke all on public.ek_globals from anon, authenticated;
+grant select (id, published, updated_at) on public.ek_globals to anon, authenticated;
+grant all on public.ek_globals to service_role;
+
+drop policy if exists "ek public reads published globals" on public.ek_globals;
+create policy "ek public reads published globals"
+  on public.ek_globals for select
+  to anon, authenticated
+  using (published is not null);
+
+insert into public.ek_globals (id) values (1) on conflict (id) do nothing;
+`;
+}

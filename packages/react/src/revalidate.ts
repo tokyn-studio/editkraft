@@ -1,4 +1,4 @@
-import { pageTag } from "./data";
+import { globalsTag, pageTag } from "./data";
 
 export interface RevalidateHandlerOptions {
   /** Shared secret; typically process.env.EDITKRAFT_REVALIDATE_SECRET. */
@@ -63,13 +63,19 @@ export function createRevalidateHandler(options: RevalidateHandlerOptions) {
 
     const payload = await request.json().catch(() => null);
     const slugs = (options.resolveSlugs ?? defaultResolveSlugs)(payload);
+    // Globals-Publish: das Studio sendet { globals: true } — invalidiert den
+    // site-weiten Globals-Tag statt (bzw. zusätzlich zu) einzelnen Seiten.
+    const globals = (payload as { globals?: unknown } | null)?.globals === true;
     // Lazy import: next/cache is only pulled at runtime so the static module
     // graph stays clean (e.g. when imported in client-adjacent trees).
     const { revalidateTag } = await import("next/cache");
     for (const slug of slugs) {
       revalidateTag(pageTag(slug));
     }
+    if (globals) {
+      revalidateTag(globalsTag());
+    }
 
-    return Response.json({ revalidated: true, slugs });
+    return Response.json({ revalidated: true, slugs, ...(globals ? { globals: true } : {}) });
   };
 }

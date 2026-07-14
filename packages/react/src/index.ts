@@ -6,8 +6,11 @@ export { EditkraftPage, type EditkraftPageProps } from "./page";
 export {
   loadPublishedPage,
   loadDraftContent,
+  loadGlobals,
+  loadDraftGlobals,
   defaultSupportedRange,
   pageTag,
+  globalsTag,
   getAlternateLocales,
   getSitemapEntries,
   type PublishedPage,

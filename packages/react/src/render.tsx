@@ -6,6 +6,12 @@ import type { Registry } from "./registry";
 export interface RenderOptions {
   /** Dev mode shows a visible placeholder for unknown/invalid blocks. */
   dev?: boolean;
+  /**
+   * Site globals (loadGlobals result). When set, every block component
+   * receives them as a `globals` prop — blocks that don't declare it simply
+   * ignore it. Works identically in RSC (live site) and client (preview).
+   */
+  globals?: Record<string, unknown>;
 }
 
 function isDev(options: RenderOptions): boolean {
@@ -108,6 +114,9 @@ function renderBlock(block: Block, registry: Registry, options: RenderOptions): 
 
   return createElement(entry.component, {
     key: block.id,
+    // Vor den validierten Props: ein Block, der selbst ein `globals`-Feld
+    // definiert, behält seinen eigenen Wert.
+    ...(options.globals !== undefined ? { globals: options.globals } : {}),
     ...props,
     children,
   });

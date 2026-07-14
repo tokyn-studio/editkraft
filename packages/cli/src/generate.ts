@@ -1,4 +1,4 @@
-import { migrationSql, i18nMigration } from "./templates/migration";
+import { migrationSql, i18nMigration, globalsMigration } from "./templates/migration";
 import {
   DEFAULT_LOCALE,
   editkraftConfig,
@@ -56,6 +56,12 @@ export function generateFiles(options: GenerateOptions): FileSpec[] {
       // One second later than init so it sorts (and applies) after it.
       path: `supabase/migrations/${incrementTimestamp(options.timestamp)}_editkraft_i18n.sql`,
       content: i18nMigration(DEFAULT_LOCALE),
+    },
+    {
+      // Third, separate migration (Site-Globals) — same reasoning: existing
+      // installations pick it up additively; +2s so it sorts after i18n.
+      path: `supabase/migrations/${incrementTimestamp(incrementTimestamp(options.timestamp))}_editkraft_globals.sql`,
+      content: globalsMigration(),
     },
     { path: "editkraft.config.ts", content: editkraftConfig() },
     { path: `${base}blocks/registry.ts`, content: registryTs() },

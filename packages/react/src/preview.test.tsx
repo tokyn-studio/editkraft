@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { act } from "react";
 import { render, screen, fireEvent, cleanup, waitFor } from "@testing-library/react";
 import { z } from "zod";
-import { defineBlock, ekText, ekRichText, ekImage, ekSelect, createMessage, type PageContent } from "@editkraft/schema";
+import { defineBlock, defineGlobals, ekText, ekRichText, ekImage, ekSelect, createMessage, type PageContent } from "@editkraft/schema";
 import { createRegistry } from "./registry";
 import { EditkraftPreview } from "./preview";
 
@@ -397,5 +397,128 @@ describe("Bild-Feld", () => {
     expect(post.mock.calls[0]![1]).toBe(STUDIO);
 
     post.mockRestore();
+  });
+});
+
+describe("Site-Globals", () => {
+  const globalsDefinition = defineGlobals({
+    schema: z.object({ phone: ekText({ label: "Telefon" }), claim: ekText() }),
+  });
+  const globalsProp = {
+    definition: globalsDefinition,
+    values: { phone: "0176 1", claim: "Alter Claim" },
+  };
+
+  function KontaktBlock({ title, globals }: { title: string; globals?: Record<string, unknown> }) {
+    return (
+      <div>
+        <span data-ek-field="title">{title}</span>
+        <span data-ek-global="phone">{String(globals?.phone ?? "")}</span>
+      </div>
+    );
+  }
+  const globalsRegistry = createRegistry([
+    {
+      definition: defineBlock({ type: "Kontakt", label: "Kontakt", schema: z.object({ title: ekText() }) }),
+      component: KontaktBlock,
+    },
+  ]);
+  const globalsContent: PageContent = {
+    schemaVersion: "0.1.0",
+    blocks: [{ id: "k1", type: "Kontakt", props: { title: "Kontakt" } }],
+  };
+
+  const renderWithGlobals = () =>
+    render(
+      <EditkraftPreview
+        content={globalsContent}
+        registry={globalsRegistry}
+        studioOrigin={STUDIO}
+        globals={globalsProp}
+      />,
+    );
+
+  const globalEl = (container: HTMLElement, key: string) =>
+    container.querySelector<HTMLElement>(`[data-ek-global="${key}"]`)!;
+
+  it("meldet ek:globals (Deskriptoren + Werte) beim Mount", () => {
+    const post = vi.spyOn(window.parent, "postMessage");
+    renderWithGlobals();
+    const msg = post.mock.calls
+      .map((c) => c[0] as { type: string; fields?: unknown[]; values?: Record<string, unknown> })
+      .find((m) => m.type === "ek:globals");
+    expect(msg).toBeTruthy();
+    expect(msg!.fields).toEqual([
+      { kind: "text", label: "Telefon", key: "phone", optional: false },
+      { kind: "text", key: "claim", optional: false },
+    ]);
+    expect(msg!.values).toEqual({ phone: "0176 1", claim: "Alter Claim" });
+    post.mockRestore();
+  });
+
+  it("sendet ohne globals-Prop KEIN ek:globals (Verhalten wie bisher)", () => {
+    const post = vi.spyOn(window.parent, "postMessage");
+    render(<EditkraftPreview content={globalsContent} registry={globalsRegistry} studioOrigin={STUDIO} />);
+    const types = post.mock.calls.map((c) => (c[0] as { type: string }).type);
+    expect(types).not.toContain("ek:globals");
+    post.mockRestore();
+  });
+
+  it("rendert Blöcke mit den Globals-Werten als Prop und macht data-ek-global editierbar", () => {
+    const { container } = renderWithGlobals();
+    const el = globalEl(container, "phone");
+    expect(el.textContent).toBe("0176 1");
+    expect(el.getAttribute("contenteditable")).toBe("true");
+  });
+
+  it("Tippen in einem Globals-Feld sendet ek:global-update (debounced)", () => {
+    vi.useFakeTimers();
+    const post = vi.spyOn(window.parent, "postMessage");
+    const { container } = renderWithGlobals();
+    const el = globalEl(container, "phone");
+    post.mockClear();
+    act(() => {
+      el.focus();
+      el.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+      el.textContent = "0151 999";
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      vi.advanceTimersByTime(400);
+    });
+    const upd = post.mock.calls
+      .map((c) => c[0] as { type: string; values?: Record<string, unknown> })
+      .find((x) => x.type === "ek:global-update");
+    expect(upd?.values).toEqual({ phone: "0151 999" });
+    post.mockRestore();
+    vi.useRealTimers();
+  });
+
+  it("eingehendes ek:global-update aktualisiert die Canvas-Vorkommen", async () => {
+    const { container } = renderWithGlobals();
+    dispatchFromStudio(createMessage("ek:global-update", { values: { phone: "0700 42" } }));
+    await waitFor(() => expect(globalEl(container, "phone").textContent).toBe("0700 42"));
+  });
+
+  it("Echo-Guard: eingehendes ek:global-update überschreibt das fokussierte Global nicht", () => {
+    const { container } = renderWithGlobals();
+    const el = globalEl(container, "phone");
+    act(() => {
+      el.focus();
+      el.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+      el.textContent = "Vom Nutzer getippt";
+    });
+    dispatchFromStudio(createMessage("ek:global-update", { values: { phone: "Echo vom Studio" } }));
+    expect(globalEl(container, "phone").textContent).toBe("Vom Nutzer getippt");
+  });
+
+  it("Verlassen des Globals-Felds übernimmt den Wert in den State (alle Vorkommen)", async () => {
+    const { container } = renderWithGlobals();
+    const el = globalEl(container, "phone");
+    act(() => {
+      el.focus();
+      el.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+      el.textContent = "0800 7";
+      el.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+    });
+    await waitFor(() => expect(globalEl(container, "phone").textContent).toBe("0800 7"));
   });
 });

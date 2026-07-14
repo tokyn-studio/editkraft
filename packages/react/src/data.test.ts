@@ -1,10 +1,15 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { z } from "zod";
+import { defineGlobals, ekText } from "@editkraft/schema";
 import {
   loadPublishedPage,
   loadDraftContent,
+  loadGlobals,
+  loadDraftGlobals,
   defaultSupportedRange,
   pageTag,
+  globalsTag,
   getAlternateLocales,
 } from "./data";
 import { EditkraftSchemaError, EditkraftError } from "./errors";
@@ -498,5 +503,77 @@ describe("Hilfsfunktionen", () => {
   });
   it("pageTag ist stabil", () => {
     expect(pageTag("start")).toBe("editkraft:page:start");
+  });
+});
+
+describe("Site-Globals-Loader", () => {
+  const definition = defineGlobals({
+    schema: z.object({ phone: ekText({ label: "Telefon" }) }),
+  });
+
+  /** Mini-Fake für ek_globals: zeichnet select()-Spalten auf. */
+  function fakeGlobalsSupabase(
+    result: { data: unknown; error?: unknown },
+    selects: string[] = [],
+  ): SupabaseClient {
+    const builder: Record<string, unknown> = {};
+    builder.select = (cols: string) => {
+      selects.push(cols);
+      return builder;
+    };
+    builder.eq = () => builder;
+    builder.maybeSingle = async () => result;
+    return { from: () => builder } as unknown as SupabaseClient;
+  }
+
+  it("globalsTag ist der site-weite Tag", () => {
+    expect(globalsTag()).toBe("editkraft:globals");
+  });
+
+  it("loadGlobals liest NUR die published-Spalte (Spalten-GRANT) und liefert die Werte", async () => {
+    const selects: string[] = [];
+    const supabase = fakeGlobalsSupabase({ data: { published: { phone: "0176 1" } } }, selects);
+    const values = await loadGlobals(supabase, definition);
+    expect(values).toEqual({ phone: "0176 1" });
+    expect(selects).toEqual(["published"]);
+  });
+
+  it("loadGlobals → null bei fehlender Tabelle (Site ohne Globals-Migration), ohne zu werfen", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const supabase = fakeGlobalsSupabase({
+      data: null,
+      error: { code: "PGRST205", message: "Could not find the table 'public.ek_globals'" },
+    });
+    await expect(loadGlobals(supabase, definition)).resolves.toBeNull();
+    warn.mockRestore();
+  });
+
+  it("loadGlobals → null bei unveröffentlichten oder schema-invaliden Werten", async () => {
+    expect(
+      await loadGlobals(fakeGlobalsSupabase({ data: { published: null } }), definition),
+    ).toBeNull();
+    expect(
+      await loadGlobals(fakeGlobalsSupabase({ data: { published: { phone: 42 } } }), definition),
+    ).toBeNull();
+  });
+
+  it("loadDraftGlobals liest draft ?? published", async () => {
+    const selects: string[] = [];
+    expect(
+      await loadDraftGlobals(
+        fakeGlobalsSupabase(
+          { data: { draft: { phone: "draft" }, published: { phone: "pub" } } },
+          selects,
+        ),
+        definition,
+      ),
+    ).toEqual({ phone: "draft" });
+    expect(selects).toEqual(["draft, published"]);
+    expect(
+      await loadDraftGlobals(
+        fakeGlobalsSupabase({ data: { draft: null, published: { phone: "pub" } } }),
+        definition,
+      ),
+    ).toEqual({ phone: "pub" });
   });
 });

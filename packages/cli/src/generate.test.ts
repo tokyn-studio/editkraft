@@ -10,6 +10,8 @@ describe("generateFiles", () => {
       `supabase/migrations/${FIXED}_editkraft_init.sql`,
       // One second after init, so filename sort applies init first.
       "supabase/migrations/20260101000001_editkraft_i18n.sql",
+      // Two seconds after init, sorts (and applies) after i18n.
+      "supabase/migrations/20260101000002_editkraft_globals.sql",
       "editkraft.config.ts",
       "blocks/registry.ts",
       "blocks/Hero.tsx",
@@ -74,6 +76,25 @@ describe("generateFiles", () => {
     expect(BigInt(timestampOf(i18nPath))).toBeGreaterThan(BigInt(timestampOf(initPath)));
     // Filename sort (the real-world apply order) puts init first:
     expect([initPath, i18nPath].sort()).toEqual([initPath, i18nPath]);
+  });
+
+  it("emits the globals migration as a third, separate file", () => {
+    const files = generateFiles({ timestamp: "20260710120000", srcDir: false });
+    const globals = files.find(
+      (f) => f.path === "supabase/migrations/20260710120002_editkraft_globals.sql",
+    );
+    expect(globals).toBeDefined();
+    expect(globals!.content).toContain("create table if not exists public.ek_globals");
+    expect(globals!.content).toContain("check (id = 1)");
+    // Draft nie öffentlich lesbar: Spalten-GRANT ohne draft + Published-Policy.
+    expect(globals!.content).toContain("revoke all on public.ek_globals from anon, authenticated");
+    expect(globals!.content).toContain(
+      "grant select (id, published, updated_at) on public.ek_globals to anon, authenticated",
+    );
+    expect(globals!.content).toContain("ek public reads published globals");
+    expect(globals!.content).not.toMatch(/grant select \([^)]*draft/);
+    // Die Einzelzeile wird direkt angelegt (Upsert-Ziel für das Studio):
+    expect(globals!.content).toContain("insert into public.ek_globals (id) values (1)");
   });
 
   it("Preview-Route nutzt Draft-Token statt Draft-Mode-Cookie", () => {

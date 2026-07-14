@@ -101,3 +101,33 @@ describe("$symbol-Knoten (V2-Contract, Roadmap 2.4)", () => {
     );
   });
 });
+
+describe("Site-Globals als Block-Prop", () => {
+  function Kontakt({ title, globals }: { title: string; globals?: Record<string, unknown> }) {
+    return (
+      <div>
+        <h2>{title}</h2>
+        <span data-testid="phone">{String(globals?.phone ?? "kein Wert")}</span>
+      </div>
+    );
+  }
+  const globalsRegistry = createRegistry([
+    {
+      definition: defineBlock({ type: "Kontakt", label: "Kontakt", schema: z.object({ title: ekText() }) }),
+      component: Kontakt,
+    },
+  ]);
+  const blocks: Block[] = [{ id: "k1", type: "Kontakt", props: { title: "Kontakt" } }];
+
+  it("reicht options.globals als globals-Prop an jeden Block", () => {
+    const html = renderToStaticMarkup(
+      renderBlocks(blocks, globalsRegistry, { globals: { phone: "0176 1" } }),
+    );
+    expect(html).toContain("0176 1");
+  });
+
+  it("ohne options.globals bekommt der Block keine globals-Prop", () => {
+    const html = renderToStaticMarkup(renderBlocks(blocks, globalsRegistry));
+    expect(html).toContain("kein Wert");
+  });
+});

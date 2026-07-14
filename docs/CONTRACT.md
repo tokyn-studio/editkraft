@@ -77,9 +77,31 @@ leitet `fields: BlockFieldDescriptor[]` ab (serialisierbar, für das Studio):
 `{ key, kind, label?, optional, … }`. `validateBlockProps(def, props)` prüft
 props gegen das Zod-Schema.
 
+## Globals-Definition (Site-Globals)
+
+```ts
+const globals = defineGlobals({
+  schema: z.object({
+    phone: ekText({ label: 'Telefon' }),
+    claim: ekText({ label: 'Claim' }).optional(),
+  }),
+});
+```
+
+Site-weite Inhalte (Kontaktdaten, Claim, …), gespeichert in `ek_globals`
+(eine Zeile, `draft`/`published`). `defineGlobals` validiert wie `defineBlock`,
+dass jedes Feld ein Editkraft-Primitive ist, und leitet
+`fields: GlobalsFieldDescriptor[]` ab (identische Form wie
+`BlockFieldDescriptor`). `validateGlobals(def, values)` prüft Werte gegen das
+Zod-Schema. Gerendert werden Globals über die `globals`-Prop des Renderers
+(`renderBlocks`/`EditkraftPage`), editierbar macht sie die Preview über
+`data-ek-global="<key>"`-Elemente (kind `text`/`richText`).
+
 ## DB-Rows (Kunden-Supabase, Prefix `ek_`)
 
-Zod-Schemas: `ekPageRowSchema`, `ekPageVersionRowSchema`, `ekAssetRowSchema`.
+Zod-Schemas: `ekPageRowSchema`, `ekPageVersionRowSchema`, `ekAssetRowSchema`,
+`ekGlobalsRowSchema` (Einzelzeile `id = 1`, `draft`/`published` jsonb — `draft`
+ist per Spalten-GRANT nie öffentlich lesbar, siehe ADR-019).
 Enum `pageStatusSchema` (`draft` | `published`), `pageMetaSchema` (offen, für
 SEO). Asset-Bucket: `EK_ASSETS_BUCKET = "ek-assets"`. Die konkreten Tabellen legt
 das CLI in Meilenstein 2 an.
@@ -110,6 +132,8 @@ Jede Nachricht trägt `channel: "editkraft"` und `v: PROTOCOL_VERSION`.
 | `ek:update` | beide | `blockId`, `props` (Studio setzt / Preview meldet Inline-Edit) |
 | `ek:focus-field` | Preview → Studio | `blockId`, `fieldKey` (Feld fokussiert / Bild-Klick) |
 | `ek:tree` | Preview → Studio | `content: PageContent` |
+| `ek:globals` | Preview → Studio | `fields: GlobalsFieldDescriptor[]`, `values` (Draft-Werte; nur wenn das Projekt Globals konfiguriert) |
+| `ek:global-update` | beide | `values` (Patch, analog `ek:update.props`) |
 
 - `createMessage(type, payload)` baut eine gültige Nachricht.
 - `parseMessage(data)` validiert und gibt die typisierte Nachricht **oder `null`**

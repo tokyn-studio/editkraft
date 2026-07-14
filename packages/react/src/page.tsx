@@ -16,6 +16,8 @@ export interface EditkraftPageProps {
   locale?: string;
   /** Locale to fall back to when no published page exists for `locale`. */
   defaultLocale?: string;
+  /** Site globals (loadGlobals result) — passed to every block as `globals` prop. */
+  globals?: Record<string, unknown>;
   /** Fallback used when no published page exists (instead of throwing). */
   notFound?: ReactNode;
 }
@@ -48,5 +50,6 @@ export async function EditkraftPage(props: EditkraftPageProps): Promise<ReactNod
 
   return renderBlocks(page.content.blocks, props.registry, {
     ...(props.dev !== undefined ? { dev: props.dev } : {}),
+    ...(props.globals !== undefined ? { globals: props.globals } : {}),
   });
 }

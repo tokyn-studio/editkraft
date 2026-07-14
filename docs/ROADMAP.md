@@ -60,9 +60,36 @@ Viewport-Umschalter Desktop/Tablet/Mobil über iframe-Breite (1280/768/375). Kei
 ### 2.6 Scheduling (editkraft + editkraft-studio)
 `ek_pages.publish_at` (timestamptz, nullable). CLI-Migration richtet `pg_cron`-Job in der **Kunden**-Supabase ein: setzt fällige `published_version_id` und ruft den Revalidate-Webhook. KEIN zentraler Scheduler in unserer Infrastruktur (Datenhoheits-Architektur). Studio: Datums-Picker am Publish-Button, Anzeige "geplant für …".
 
+### 2.7 Supabase OAuth-Connect im Site-Wizard (editkraft-studio) — User-Freigabe 2026-07-13
+Statt Supabase-URL + Service-Key von Hand: Button „Mit Supabase verbinden" (Supabase-OAuth-App, „Build with Supabase"). Nach Autorisierung erledigt das Studio per Management-API: Projekt in der **Kunden**-Organisation anlegen (Datenhoheit bleibt beim Kunden — Abgrenzung zu Managed-Hosting, das bewusst NICHT gebaut wird), `ek_*`-Migrationen einspielen, Keys abrufen und wie bisher verschlüsselt speichern. Eliminiert im Onboarding: Dashboard-Besuch, Key-Kopieren UND den `supabase db push`-Schritt der CLI-Anleitung. Wizard muss das Supabase-Free-Limit (2 aktive Projekte pro Account) sauber anzeigen. Herkunft: echter Kundentest — die Key-Abfrage ist die abschreckendste Stelle des Flows. Voraussetzungen: OAuth-App-Registrierung bei Supabase, Token-Storage analog `site_connections`, Scope-Doku.
+
+### 2.8 Collections & Blog-Editing (editkraft + editkraft-studio) — aufgenommen 2026-07-14, Herkunft: fastmode-Konkurrenzanalyse
+- **Problem:** Wiederholende Inhalte (Blogeinträge, Team, Referenzen, Testimonials) haben bei uns kein Datenmodell — jede Seite ist ein eigener Blocktree. fastmode gewinnt Nutzer genau mit „Upload → Blog/Team werden automatisch als Collections erkannt", kann das aber nur für statisches HTML.
+- **Repo editkraft:** Tabellen `ek_collections` (id, name, slug, Feld-Schema als jsonb auf Basis der `@editkraft/schema`-Feldtypen) und `ek_collection_items` (id, collection_id, slug, data jsonb, published_at, sort_order) in der **Kunden**-Supabase (Datenhoheit wie bei Seiten). Renderer-Helper `getCollection()` / `getCollectionItem()` (published-Filter, Sortierung), damit Next.js-/Astro-Routen Items direkt rendern.
+- **Repo editkraft-studio:** Collection-Übersicht je Site, Item-Editor mit demselben Feld-Editing wie Seiten (Draft/Publish je Item); Blog ist der Default-Anwendungsfall.
+- **Auto-Detection (der eigentliche Differenzierer):** CLI-/MCP-Kommando scannt das Kundenprojekt (MDX-/Content-Ordner, Astro Content Collections, hartkodierte gemappte Arrays) und schlägt Collections samt Feld-Schema, Migrations-Skript und Code-Umbau auf `getCollection()` vor. Anspruch: „5 Minuten bis zum editierbaren Blog in einem Next.js-Projekt" — fastmodes Zero-Config-Versprechen, aber für echten Framework-Code.
+- Detail-Design vor Umsetzung als Spec in `docs/superpowers/specs/`.
+- DoD: Next.js-Projekt mit hartkodierter Blog-Liste → Scan erkennt die Struktur und legt Collection + Items an → Redakteur legt im Studio einen neuen Beitrag an und published ihn → Site rendert ihn.
+
+### 2.9 Formulare & Submissions (editkraft + editkraft-studio) — aufgenommen 2026-07-14, Herkunft: fastmode-Konkurrenzanalyse
+- **Repo editkraft:** `<EkForm name="…">`-Wrapper in `@editkraft/react`; Submissions landen in `ek_form_submissions` in der **Kunden**-Supabase (RLS: anon insert mit Rate-Limit, read nur service). Honeypot-Feld standardmäßig.
+- **Repo editkraft-studio:** Submissions-Inbox je Site (Filter nach Formular, CSV-Export), E-Mail-Benachrichtigung an konfigurierbare Empfänger, optional Webhook je Formular.
+- **Abgrenzung fastmode:** dort gibt es Formular-Erkennung + Submissions-API, aber keine dokumentierten Benachrichtigungen, keinen Spam-Schutz und keine Webhooks — genau diese drei bauen wir mit.
+- DoD: Kontaktformular absenden → Submission erscheint in der Inbox + Benachrichtigungs-Mail geht raus → Honeypot-Testeintrag erscheint nicht.
+
+### 2.10 editkraft MCP-Server (Repo: editkraft, npm-Paket `@editkraft/mcp`) — aufgenommen 2026-07-14, Herkunft: fastmode-Konkurrenzanalyse
+- Per `npx` startbar ohne Installation; Auth gegen das Studio (Device-Flow o.ä., Token-Storage analog `site_connections`).
+- Tools: Projekt-/Site-Liste, Registry-/Schema-Introspektion, Seiten- und Collection-CRUD (immer als Draft), Instrumentierungs-Check („welche Komponenten sind noch nicht an ek-Felder gebunden?").
+- Zweck: Cursor, Claude Code, Windsurf & Co. generieren direkt editkraft-instrumentierten Code — AI-Coding-Tools sind der Distributionskanal dieser Kategorie (fastmode dokumentiert seinen MCP-Server `fastmode-mcp` für acht Clients).
+- Setup-Doku je Client (mind. Cursor, Claude Code, Windsurf).
+- DoD: In Cursor per MCP eine Seite anlegen und ein Feld ändern → Änderung erscheint als Draft im Studio.
+
 ## 3. V3+ — nicht beginnen, nicht vorbereiten
 
-Vorlagen-Bibliothek (kuratierte Seiten-Templates je Registry). Erst planen, wenn echte Sites Muster liefern.
+- Vorlagen-Bibliothek (kuratierte Seiten-Templates je Registry). Erst planen, wenn echte Sites Muster liefern.
+- Externe Content-REST-API (Collections/Items/Submissions lesen & schreiben, published-Filter, API-Keys je Site) für Headless-Nutzung — fastmode bietet das schon im Free-Tier, für uns erst sinnvoll, wenn 2.8/2.9 stehen.
+- Page-Level-SEO-Controls + globale Head-Code-Injection im Studio (sofern nicht bereits über Registry-Felder des Kundenprojekts abgedeckt).
+- White-label Client-Portal für Agenturen (eigenes Branding/eigene Domain für Kunden-Logins) — passt zum Agency-Entitlement aus 2.5; fastmode nutzt das als einziges echtes Pro-Argument ($20/Monat).
 
 ## 4. AI-Paket — separater Auftrag, kostenpflichtiges Add-on
 

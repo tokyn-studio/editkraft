@@ -62,3 +62,25 @@ describe("createRevalidateHandler", () => {
     expect(revalidateTag).toHaveBeenCalledWith("editkraft:page:custom");
   });
 });
+
+describe("Globals-Revalidate", () => {
+  it("Payload { globals: true } invalidiert den Globals-Tag", async () => {
+    const handler = createRevalidateHandler({ secret: "s3cret" });
+    const res = await handler(post({ globals: true }, { header: "s3cret" }));
+    expect(res.status).toBe(200);
+    expect(revalidateTag).toHaveBeenCalledWith("editkraft:globals");
+  });
+
+  it("Slugs und Globals zusammen: beide Tags werden invalidiert", async () => {
+    const handler = createRevalidateHandler({ secret: "s3cret" });
+    await handler(post({ record: { slug: "start" }, globals: true }, { header: "s3cret" }));
+    expect(revalidateTag).toHaveBeenCalledWith("editkraft:page:start");
+    expect(revalidateTag).toHaveBeenCalledWith("editkraft:globals");
+  });
+
+  it("ohne globals-Flag wird der Globals-Tag NICHT invalidiert", async () => {
+    const handler = createRevalidateHandler({ secret: "s3cret" });
+    await handler(post({ record: { slug: "start" } }, { header: "s3cret" }));
+    expect(revalidateTag).not.toHaveBeenCalledWith("editkraft:globals");
+  });
+});

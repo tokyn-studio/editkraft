@@ -4,6 +4,7 @@ import {
   SCHEMA_VERSION,
   isCompatible,
   majorOf,
+  type GlobalsDefinition,
   type PageContent,
   type PageMeta,
 } from "@editkraft/schema";
@@ -177,6 +178,69 @@ export async function loadPublishedPage(
 /** ISR cache tag for a page. The revalidate handler invalidates exactly this tag. */
 export function pageTag(slug: string): string {
   return `editkraft:page:${slug}`;
+}
+
+/** ISR cache tag for the site globals (invalidated on globals publish). */
+export function globalsTag(): string {
+  return "editkraft:globals";
+}
+
+/** Values of a globals definition, inferred from its Zod schema. */
+type GlobalsValues<D extends GlobalsDefinition> = D["schema"]["_output"];
+
+async function selectGlobalsRow(
+  supabase: SupabaseClient,
+  columns: string,
+): Promise<Record<string, unknown> | null> {
+  const { data, error } = await supabase
+    .from("ek_globals")
+    .select(columns)
+    .eq("id", 1)
+    .maybeSingle();
+  if (error) {
+    // Fehlende Tabelle (Site noch ohne Globals-Migration) und alle anderen
+    // Fehler → null: Globals dürfen die Site nie zum Absturz bringen, der
+    // Aufrufer fällt auf seine Code-Defaults zurück.
+    console.warn(`[editkraft] loadGlobals: ${error.message}`);
+    return null;
+  }
+  return (data as Record<string, unknown> | null) ?? null;
+}
+
+/**
+ * Loads the PUBLISHED site globals and validates them against the definition.
+ * Selects only the `published` column (the column GRANT for anon/authenticated
+ * does not include `draft`). Returns null — never throws — when the table is
+ * missing (site not migrated yet), nothing is published, or the stored values
+ * do not match the definition; callers fall back to their code defaults:
+ *
+ *   const globals = (await loadGlobals(supabase, globalsDefinition)) ?? settings;
+ */
+export async function loadGlobals<D extends GlobalsDefinition>(
+  supabase: SupabaseClient,
+  definition: D,
+): Promise<GlobalsValues<D> | null> {
+  const row = await selectGlobalsRow(supabase, "published");
+  if (!row || row.published == null) return null;
+  const parsed = definition.schema.safeParse(row.published);
+  return parsed.success ? (parsed.data as GlobalsValues<D>) : null;
+}
+
+/**
+ * Draft counterpart of `loadGlobals` for the Studio preview route: reads
+ * `draft ?? published`. The given client MUST be a server client with
+ * service_role (the draft column is not granted to anon/authenticated).
+ */
+export async function loadDraftGlobals<D extends GlobalsDefinition>(
+  supabase: SupabaseClient,
+  definition: D,
+): Promise<GlobalsValues<D> | null> {
+  const row = await selectGlobalsRow(supabase, "draft, published");
+  if (!row) return null;
+  const values = row.draft ?? row.published;
+  if (values == null) return null;
+  const parsed = definition.schema.safeParse(values);
+  return parsed.success ? (parsed.data as GlobalsValues<D>) : null;
 }
 
 /**

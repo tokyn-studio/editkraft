@@ -21,6 +21,7 @@ import {
   type EkFieldKind,
   type EkImageFrame,
   type EkSelectOption,
+  type GlobalsDefinition,
   type PageContent,
 } from "@editkraft/schema";
 import type { Registry } from "./registry";
@@ -32,6 +33,13 @@ export interface EditkraftPreviewProps {
   registry: Registry;
   /** Erlaubte Studio-Origin (Ziel für postMessage und Origin-Check eingehender Nachrichten). */
   studioOrigin: string;
+  /**
+   * Site-Globals: Definition + serverseitig geladene Draft-Werte
+   * (loadDraftGlobals ?? Code-Defaults). Wenn gesetzt, meldet die Preview
+   * ek:globals an das Studio und macht `data-ek-global="<key>"`-Elemente
+   * inline editierbar (kind text/richText).
+   */
+  globals?: { definition: GlobalsDefinition; values: Record<string, unknown> };
 }
 
 function postToStudio(message: unknown, origin: string): void {
@@ -44,10 +52,12 @@ function PreviewBlocks({
   blocks,
   registry,
   onSelect,
+  globals,
 }: {
   blocks: Block[];
   registry: Registry;
   onSelect: (id: string) => void;
+  globals?: Record<string, unknown> | undefined;
 }): ReactNode {
   return createElement(
     Fragment,
@@ -58,10 +68,18 @@ function PreviewBlocks({
       const inner =
         entry && parsed?.success
           ? createElement(entry.component, {
+              // Vor den validierten Props (wie im Renderer): ein Block mit
+              // eigenem `globals`-Feld behält seinen eigenen Wert.
+              ...(globals !== undefined ? { globals } : {}),
               ...(parsed.data as Record<string, unknown>),
               children:
                 block.children && block.children.length > 0
-                  ? createElement(PreviewBlocks, { blocks: block.children, registry, onSelect })
+                  ? createElement(PreviewBlocks, {
+                      blocks: block.children,
+                      registry,
+                      onSelect,
+                      globals,
+                    })
                   : undefined,
             })
           : createElement("div", { style: { padding: 8, color: "#92400e" } }, `Block "${block.type}"`);
@@ -99,8 +117,14 @@ export function EditkraftPreview({
   content,
   registry,
   studioOrigin,
+  globals,
 }: EditkraftPreviewProps): ReactNode {
   const [tree, setTree] = useState<PageContent>(content);
+  // Globals-Werte: initial die serverseitig geladenen Draft-Werte; aktualisiert
+  // beim Verlassen eines data-ek-global-Felds bzw. durch eingehende Updates.
+  const [globalValues, setGlobalValues] = useState<Record<string, unknown>>(
+    globals?.values ?? {},
+  );
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [toolbar, setToolbar] = useState<{ top: number; left: number } | null>(null);
   const [fmt, setFmt] = useState<{
@@ -114,7 +138,11 @@ export function EditkraftPreview({
   } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const focusedRef = useRef<{ blockId: string; fieldKey: string } | null>(null);
+  // Fokussiertes Globals-Feld (data-ek-global) — getrennt von focusedRef,
+  // weil Globals keine blockId haben und keine Format-Toolbar bekommen (v1).
+  const focusedGlobalRef = useRef<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const globalDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const refreshRef = useRef<() => void>(() => {});
   // Zuletzt bekannte Selektion im fokussierten Feld – wird vor execCommand
   // wiederhergestellt, falls der Toolbar-Klick sie kurz verliert.
@@ -170,6 +198,33 @@ export function EditkraftPreview({
   const fieldKindOf = (blockType: string, fieldKey: string): EkFieldKind | undefined =>
     registry.get(blockType)?.definition.fields.find((f) => f.key === fieldKey)?.kind;
 
+  // Feld-kind eines Site-Globals über die Definition auflösen.
+  const globalKindOf = (key: string): EkFieldKind | undefined =>
+    globals?.definition.fields.find((f) => f.key === key)?.kind;
+
+  /**
+   * Spielt Globals-Werte imperativ in alle data-ek-global-Vorkommen AUSSERHALB
+   * des Canvas (Site-Chrome wie Header/Footer, serverseitig gerendert — React
+   * erreicht sie nicht). Im Canvas übernimmt das der globals-Prop-Fluss.
+   */
+  const applyGlobalsToChrome = (values: Record<string, unknown>) => {
+    if (typeof document === "undefined") return;
+    const root = containerRef.current;
+    for (const [key, value] of Object.entries(values)) {
+      const kind = globalKindOf(key);
+      if (kind !== "text" && kind !== "richText") continue;
+      const esc =
+        typeof CSS !== "undefined" && CSS.escape ? CSS.escape(key) : key.replace(/"/g, '\\"');
+      for (const el of Array.from(
+        document.querySelectorAll<HTMLElement>(`[data-ek-global="${esc}"]`),
+      )) {
+        if (root && root.contains(el)) continue;
+        if (kind === "richText") el.innerHTML = sanitizeRichText(String(value ?? ""));
+        else el.textContent = String(value ?? "");
+      }
+    }
+  };
+
   const blockTypeOf = (blockId: string): string | undefined => {
     const find = (blocks: Block[]): string | undefined => {
       for (const b of blocks) {
@@ -188,6 +243,15 @@ export function EditkraftPreview({
     postToStudio(createMessage("ek:ready", { schemaVersion: content.schemaVersion }), studioOrigin);
     postToStudio(createMessage("ek:schema", { blocks: registry.descriptors() }), studioOrigin);
     postToStudio(createMessage("ek:tree", { content }), studioOrigin);
+    if (globals) {
+      postToStudio(
+        createMessage("ek:globals", {
+          fields: globals.definition.fields,
+          values: globals.values,
+        }),
+        studioOrigin,
+      );
+    }
 
     const onMessage = (event: MessageEvent) => {
       if (!isAllowedOrigin(event.origin, studioOrigin)) return;
@@ -203,6 +267,17 @@ export function EditkraftPreview({
         }
         if (Object.keys(props).length > 0) {
           setTree((current) => updateBlockProps(current, message.blockId, props));
+        }
+      } else if (message.type === "ek:global-update") {
+        // Echo-Guard wie bei ek:update: das gerade editierte Global nicht
+        // aus dem Studio zurücksetzen.
+        const focusedKey = focusedGlobalRef.current;
+        const values = Object.fromEntries(
+          Object.entries(message.values).filter(([k]) => k !== focusedKey),
+        );
+        if (Object.keys(values).length > 0) {
+          setGlobalValues((current) => ({ ...current, ...values }));
+          applyGlobalsToChrome(values);
         }
       } else if (message.type === "ek:select") {
         setSelectedId(message.blockId);
@@ -230,6 +305,19 @@ export function EditkraftPreview({
       // mit der selectionchange-getriebenen Toolbar).
       if ((kind === "text" || kind === "richText") && el.getAttribute("contenteditable") !== "true") {
         el.setAttribute("contenteditable", "true");
+      }
+    }
+    // Site-Globals: data-ek-global-Elemente im Canvas ebenso editierbar machen.
+    if (globals) {
+      for (const el of Array.from(root.querySelectorAll<HTMLElement>("[data-ek-global]"))) {
+        const key = el.getAttribute("data-ek-global") ?? "";
+        const kind = globalKindOf(key);
+        if (
+          (kind === "text" || kind === "richText") &&
+          el.getAttribute("contenteditable") !== "true"
+        ) {
+          el.setAttribute("contenteditable", "true");
+        }
       }
     }
   });
@@ -345,19 +433,46 @@ export function EditkraftPreview({
     return { el, blockId, fieldKey, kind };
   };
 
+  // Globals-Pendant zu resolveField: data-ek-global-Element + Feld-Kind.
+  const resolveGlobal = (target: HTMLElement) => {
+    if (!globals) return null;
+    const el = target.closest<HTMLElement>("[data-ek-global]");
+    if (!el) return null;
+    const key = el.getAttribute("data-ek-global") ?? "";
+    const kind = globalKindOf(key);
+    if (kind !== "text" && kind !== "richText") return null;
+    return { el, key, kind };
+  };
+
+  const sendGlobalUpdateDebounced = (key: string, value: string) => {
+    if (globalDebounceRef.current) clearTimeout(globalDebounceRef.current);
+    globalDebounceRef.current = setTimeout(() => {
+      postToStudio(createMessage("ek:global-update", { values: { [key]: value } }), studioOrigin);
+    }, 300);
+  };
+
   const onInput = (e: { target: EventTarget | null }) => {
     const f = resolveField(e.target as HTMLElement);
-    if (!f) return;
-    sendUpdateDebounced(f.blockId, f.fieldKey, currentValueFromDom(f.el, f.kind));
+    if (f) {
+      sendUpdateDebounced(f.blockId, f.fieldKey, currentValueFromDom(f.el, f.kind));
+      return;
+    }
+    const g = resolveGlobal(e.target as HTMLElement);
+    if (!g) return;
+    sendGlobalUpdateDebounced(g.key, currentValueFromDom(g.el, g.kind));
   };
 
   const onFocusIn = (e: { target: EventTarget | null }) => {
     const f = resolveField(e.target as HTMLElement);
-    if (!f) return;
-    focusedRef.current = { blockId: f.blockId, fieldKey: f.fieldKey };
-    postToStudio(createMessage("ek:focus-field", { blockId: f.blockId, fieldKey: f.fieldKey }), studioOrigin);
-    // Beim Klick in ein richText-Feld sofort die Format-Toolbar zeigen.
-    refreshToolbar();
+    if (f) {
+      focusedRef.current = { blockId: f.blockId, fieldKey: f.fieldKey };
+      postToStudio(createMessage("ek:focus-field", { blockId: f.blockId, fieldKey: f.fieldKey }), studioOrigin);
+      // Beim Klick in ein richText-Feld sofort die Format-Toolbar zeigen.
+      refreshToolbar();
+      return;
+    }
+    const g = resolveGlobal(e.target as HTMLElement);
+    if (g) focusedGlobalRef.current = g.key;
   };
 
   const onFocusOut = (e: { target: EventTarget | null }) => {
@@ -365,7 +480,18 @@ export function EditkraftPreview({
     focusedRef.current = null;
     setToolbar(null);
     setFmt(null);
-    if (!f) return;
+    if (!f) {
+      // Globals-Feld verlassen: finalen Wert in den State übernehmen (React
+      // aktualisiert damit alle Canvas-Vorkommen) + Site-Chrome imperativ.
+      const g = resolveGlobal(e.target as HTMLElement);
+      focusedGlobalRef.current = null;
+      if (!g || popoverOpenRef.current) return;
+      const value = currentValueFromDom(g.el, g.kind);
+      setGlobalValues((current) => ({ ...current, [g.key]: value }));
+      applyGlobalsToChrome({ [g.key]: value });
+      sendGlobalUpdateDebounced(g.key, value);
+      return;
+    }
     // Popover offen (z. B. Fokus im Link-Eingabefeld): Feld NICHT in den Tree
     // schreiben – sonst re-rendert das Feld und die gespeicherte Selektion
     // (für den Inline-Link) zeigt auf ersetzte Knoten.
@@ -445,12 +571,22 @@ export function EditkraftPreview({
     [studioOrigin],
   );
 
-  // Block-Baum NUR von `tree` (und stabilen Deps) abhängig memoizen. So lösen
-  // Toolbar-/Format-/Auswahl-State-Änderungen KEIN Re-Render der editierbaren
-  // Felder aus – der contentEditable-DOM bleibt stabil, Selektion/Cursor überleben.
+  // Block-Baum NUR von `tree`/`globalValues` (und stabilen Deps) abhängig
+  // memoizen. So lösen Toolbar-/Format-/Auswahl-State-Änderungen KEIN Re-Render
+  // der editierbaren Felder aus – der contentEditable-DOM bleibt stabil,
+  // Selektion/Cursor überleben. globalValues ändert sich nur beim VERLASSEN
+  // eines Globals-Felds (oder durch Studio-Updates auf nicht-fokussierte Keys),
+  // nie während des Tippens — der Cursor ist also auch hier sicher.
   const blocksEl = useMemo(
-    () => createElement(PreviewBlocks, { blocks: tree.blocks, registry, onSelect }),
-    [tree.blocks, registry, onSelect],
+    () =>
+      createElement(PreviewBlocks, {
+        blocks: tree.blocks,
+        registry,
+        onSelect,
+        globals: globals ? globalValues : undefined,
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tree.blocks, registry, onSelect, globalValues],
   );
 
   // Auswahl-Outline imperativ setzen (ohne Re-Render der Blöcke).
