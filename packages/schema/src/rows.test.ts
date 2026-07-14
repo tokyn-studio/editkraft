@@ -5,6 +5,7 @@ import {
   ekPageRowSchema,
   ekPageVersionRowSchema,
   ekAssetRowSchema,
+  ekGlobalsRowSchema,
   EK_ASSETS_BUCKET,
 } from "./rows";
 
@@ -111,6 +112,25 @@ describe("ekPageRowSchema locale contract", () => {
         locale: "a",
         translation_group_id: "5f0f6a3e-aaaa-4bbb-8ccc-444455556666",
       }),
+    ).toThrow();
+  });
+});
+
+describe("ekGlobalsRowSchema", () => {
+  it("akzeptiert die Einzelzeile mit draft/published", () => {
+    const row = ekGlobalsRowSchema.parse({
+      id: 1,
+      draft: { phone: "0176 1" },
+      published: null,
+      updated_at: "2026-07-14T10:00:00Z",
+    });
+    expect(row.draft).toEqual({ phone: "0176 1" });
+    expect(row.published).toBeNull();
+  });
+
+  it("lehnt Nicht-Objekt-Werte in draft ab", () => {
+    expect(() =>
+      ekGlobalsRowSchema.parse({ id: 1, draft: "x", published: null, updated_at: "t" }),
     ).toThrow();
   });
 });

@@ -1,5 +1,6 @@
 import { Fragment, type ReactNode, createElement } from "react";
-import { sanitizeRichText, type Block, type BlockFieldDescriptor } from "@editkraft/schema";
+import { sanitizeRichText, isSymbolRef, type Block, type BlockFieldDescriptor } from "@editkraft/schema";
+import { EditkraftError } from "./errors";
 import type { Registry } from "./registry";
 
 export interface RenderOptions {
@@ -59,6 +60,16 @@ function sanitizeRichTextProps(
  * - Invalid props (schema): dev → placeholder, production → warn + skip.
  */
 function renderBlock(block: Block, registry: Registry, options: RenderOptions): ReactNode {
+  // Reservierter V2-Knoten (Roadmap 2.4): das Wire-Format akzeptiert
+  // $symbol-Referenzen schon heute, auflösen kann sie erst V2 — definierter
+  // Fehler statt stillem Skip, damit niemand Symbols versehentlich shippt.
+  if (isSymbolRef(block)) {
+    throw new EditkraftError(
+      "SYMBOLS_UNSUPPORTED",
+      "Symbol nodes ($symbol) are reserved for a future release and cannot be rendered yet. " +
+        "Remove the symbol reference or upgrade once symbols ship.",
+    );
+  }
   const entry = registry.get(block.type);
   if (!entry) {
     if (isDev(options)) {

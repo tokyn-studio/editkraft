@@ -7,11 +7,13 @@ import { pageContentSchema, type BlockFieldDescriptor } from "./block";
  * Studio-Seite implementiert das Nachbar-Repo.
  *
  * Richtung:
- *   preview → studio: ek:ready, ek:schema, ek:tree, ek:select, ek:focus-field
+ *   preview → studio: ek:ready, ek:schema, ek:tree, ek:select, ek:focus-field,
+ *                     ek:globals (Deskriptoren + Draft-Werte der Site-Globals),
  *                     ek:update (Inline-Edit im Preview)
  *   studio → preview: ek:select (Selektion setzen), ek:update (Prop-Update)
  *
- * ek:select und ek:update sind bidirektional (beide Seiten senden/empfangen).
+ * ek:select, ek:update und ek:global-update sind bidirektional
+ * (beide Seiten senden/empfangen).
  *
  * Jede Nachricht trägt `channel: "editkraft"` und `v` (Protokollversion), damit
  * fremde postMessages sicher ignoriert werden. Zusätzlich MUSS der Empfänger die
@@ -92,6 +94,25 @@ export const ekFocusFieldMessage = z.object({
 });
 export type EkFocusFieldMessage = z.infer<typeof ekFocusFieldMessage>;
 
+/** Preview → Studio: Site-Globals — Feld-Deskriptoren + aktuelle (Draft-)Werte.
+ *  Wird nur gesendet, wenn das Kundenprojekt Globals konfiguriert hat. */
+export const ekGlobalsMessage = z.object({
+  ...base,
+  type: z.literal("ek:globals"),
+  fields: z.array(blockFieldDescriptorSchema),
+  values: z.record(z.string(), z.unknown()),
+});
+export type EkGlobalsMessage = z.infer<typeof ekGlobalsMessage>;
+
+/** Werte-Patch für Site-Globals. Bidirektional: die Preview meldet Inline-Edits,
+ *  das Studio spielt Updates (z. B. nach Undo) mit derselben Payload zurück. */
+export const ekGlobalUpdateMessage = z.object({
+  ...base,
+  type: z.literal("ek:global-update"),
+  values: z.record(z.string(), z.unknown()),
+});
+export type EkGlobalUpdateMessage = z.infer<typeof ekGlobalUpdateMessage>;
+
 export const ekMessage = z.discriminatedUnion("type", [
   ekReadyMessage,
   ekSelectMessage,
@@ -99,6 +120,8 @@ export const ekMessage = z.discriminatedUnion("type", [
   ekTreeMessage,
   ekSchemaMessage,
   ekFocusFieldMessage,
+  ekGlobalsMessage,
+  ekGlobalUpdateMessage,
 ]);
 
 export type EkReadyMessage = z.infer<typeof ekReadyMessage>;

@@ -17,14 +17,44 @@ export interface Block {
   children?: Block[] | undefined;
 }
 
+/**
+ * Reservierter Referenz-Knoten (V2 „Symbols", Roadmap 2.4): verweist auf eine
+ * Zeile in `ek_symbols`. In v1 NICHT auflösbar — der Renderer wirft dafür den
+ * definierten „nicht unterstützt"-Fehler. Der Knoten ist trotzdem schon jetzt
+ * Teil des Wire-Formats, damit V2 kein Major-Release des Schemas braucht:
+ * jeder ab heute ausgelieferte Parser akzeptiert Symbol-Knoten.
+ */
+export const symbolRefSchema = z.object({
+  id: z.string().min(1),
+  type: z.literal("$symbol"),
+  symbolId: z.string().min(1),
+});
+export type SymbolRef = z.infer<typeof symbolRefSchema>;
+
+/** Laufzeit-Guard für den reservierten Symbol-Knoten. */
+export function isSymbolRef(node: unknown): node is SymbolRef {
+  return (
+    typeof node === "object" &&
+    node !== null &&
+    (node as { type?: unknown }).type === "$symbol"
+  );
+}
+
+// Der TS-Typ `Block` bleibt in v1 bewusst der Content-Block (kein Union):
+// Konsumenten (Renderer, Studio) kompilieren unverändert; Symbol-Knoten
+// erkennt man zur Laufzeit über isSymbolRef, BEVOR auf props/children
+// zugegriffen wird. Der Typ-Umbau auf ein Union kommt mit V2.
 export const blockSchema: z.ZodType<Block> = z.lazy(() =>
-  z.object({
-    id: z.string().min(1),
-    type: z.string().min(1),
-    props: z.record(z.string(), z.unknown()),
-    children: z.array(blockSchema).optional(),
-  }),
-);
+  z.union([
+    symbolRefSchema,
+    z.object({
+      id: z.string().min(1),
+      type: z.string().min(1),
+      props: z.record(z.string(), z.unknown()),
+      children: z.array(blockSchema).optional(),
+    }),
+  ]),
+) as unknown as z.ZodType<Block>;
 
 export const pageContentSchema = z.object({
   schemaVersion: z.string(),
@@ -41,6 +71,29 @@ export function emptyPageContent(): PageContent {
 
 /** Serializable field description for the Studio (derived from the Zod schema). */
 export type BlockFieldDescriptor = EkFieldMeta & { key: string; optional: boolean };
+
+/**
+ * Derives the serializable field descriptors from a Zod object shape.
+ * Shared by defineBlock and defineGlobals; every field MUST be an
+ * Editkraft primitive (only primitives are editable in the Studio).
+ */
+export function deriveFieldDescriptors(
+  shape: z.ZodRawShape,
+  context: string,
+): BlockFieldDescriptor[] {
+  const fields: BlockFieldDescriptor[] = [];
+  for (const [key, field] of Object.entries(shape)) {
+    const meta = getFieldMeta(field);
+    if (!meta) {
+      throw new Error(
+        `${context}: field "${key}" does not use an Editkraft primitive ` +
+          "(ekText, ekImage, …). Only primitives are editable in the Studio.",
+      );
+    }
+    fields.push({ ...meta, key, optional: field.isOptional() });
+  }
+  return fields;
+}
 
 export interface BlockDefinitionInput<
   Shape extends z.ZodRawShape = z.ZodRawShape,
@@ -70,19 +123,10 @@ export function defineBlock<Shape extends z.ZodRawShape>(
   if (!input.type) throw new Error("defineBlock: type is required");
   if (!input.label) throw new Error(`defineBlock("${input.type}"): label is required`);
 
-  const shape = input.schema.shape as z.ZodRawShape;
-  const fields: BlockFieldDescriptor[] = [];
-
-  for (const [key, field] of Object.entries(shape)) {
-    const meta = getFieldMeta(field);
-    if (!meta) {
-      throw new Error(
-        `defineBlock("${input.type}"): field "${key}" does not use an Editkraft primitive ` +
-          "(ekText, ekImage, …). Only primitives are editable in the Studio.",
-      );
-    }
-    fields.push({ ...meta, key, optional: field.isOptional() });
-  }
+  const fields = deriveFieldDescriptors(
+    input.schema.shape as z.ZodRawShape,
+    `defineBlock("${input.type}")`,
+  );
 
   return { ...input, slots: input.slots ?? [], fields };
 }

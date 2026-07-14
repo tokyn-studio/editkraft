@@ -30,6 +30,9 @@ export {
 
 export {
   blockSchema,
+  symbolRefSchema,
+  isSymbolRef,
+  type SymbolRef,
   pageContentSchema,
   emptyPageContent,
   defineBlock,
@@ -53,17 +56,27 @@ export {
 } from "./version";
 
 export {
+  defineGlobals,
+  validateGlobals,
+  type GlobalsDefinition,
+  type GlobalsDefinitionInput,
+  type GlobalsFieldDescriptor,
+} from "./globals";
+
+export {
   pageStatusSchema,
   pageMetaSchema,
   ekPageRowSchema,
   ekPageVersionRowSchema,
   ekAssetRowSchema,
+  ekGlobalsRowSchema,
   EK_ASSETS_BUCKET,
   type PageStatus,
   type PageMeta,
   type EkPageRow,
   type EkPageVersionRow,
   type EkAssetRow,
+  type EkGlobalsRow,
 } from "./rows";
 
 export { createDraftToken, verifyDraftToken } from "./draft-token";
@@ -77,6 +90,8 @@ export {
   ekTreeMessage,
   ekSchemaMessage,
   ekFocusFieldMessage,
+  ekGlobalsMessage,
+  ekGlobalUpdateMessage,
   ekMessage,
   parseMessage,
   createMessage,
@@ -87,6 +102,8 @@ export {
   type EkTreeMessage,
   type EkSchemaMessage,
   type EkFocusFieldMessage,
+  type EkGlobalsMessage,
+  type EkGlobalUpdateMessage,
   type EkMessage,
   type BlockSchemaDescriptor,
 } from "./protocol";

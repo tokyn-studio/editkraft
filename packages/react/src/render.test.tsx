@@ -92,3 +92,12 @@ describe("renderBlocks", () => {
     expect(out).toContain("<strong>fett</strong>");
   });
 });
+
+describe("$symbol-Knoten (V2-Contract, Roadmap 2.4)", () => {
+  it("wirft SYMBOLS_UNSUPPORTED statt still zu skippen", () => {
+    const symbolNode = { id: "s1", type: "$symbol", symbolId: "sym-1" } as unknown as Block;
+    expect(() => renderBlocks([symbolNode], registry)).toThrowError(
+      expect.objectContaining({ code: "SYMBOLS_UNSUPPORTED" }),
+    );
+  });
+});

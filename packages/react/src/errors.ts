@@ -6,7 +6,8 @@ export type EditkraftErrorCode =
   | "REGISTRY_INVALID"
   | "SCHEMA_INCOMPATIBLE"
   | "PAGE_NOT_FOUND"
-  | "CONTENT_INVALID";
+  | "CONTENT_INVALID"
+  | "SYMBOLS_UNSUPPORTED";
 
 export class EditkraftError extends Error {
   constructor(

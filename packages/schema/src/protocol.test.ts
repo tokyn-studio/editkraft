@@ -104,3 +104,31 @@ describe("ek:focus-field", () => {
     expect(ekFocusFieldMessage.safeParse({ channel: "editkraft", v: 1, type: "ek:focus-field", blockId: "b1" }).success).toBe(false);
   });
 });
+
+describe("Site-Globals-Messages", () => {
+  it("createMessage baut eine gültige ek:globals-Nachricht", () => {
+    const msg = createMessage("ek:globals", {
+      fields: [{ kind: "text", label: "Telefon", key: "phone", optional: false }],
+      values: { phone: "0176 1" },
+    });
+    expect(parseMessage(msg)?.type).toBe("ek:globals");
+  });
+
+  it("ek:globals verlangt fields und values", () => {
+    expect(
+      ekMessage.safeParse({ channel: "editkraft", v: 1, type: "ek:globals", fields: [] }).success,
+    ).toBe(false);
+  });
+
+  it("ek:global-update transportiert einen Werte-Patch", () => {
+    const parsed = parseMessage(createMessage("ek:global-update", { values: { phone: "x" } }));
+    expect(parsed?.type).toBe("ek:global-update");
+    expect(parsed && parsed.type === "ek:global-update" ? parsed.values : null).toEqual({
+      phone: "x",
+    });
+  });
+
+  it("Rückwärtskompatibilität: unbekannte Typen parsen weiterhin zu null", () => {
+    expect(parseMessage({ channel: "editkraft", v: 1, type: "ek:does-not-exist" })).toBeNull();
+  });
+});

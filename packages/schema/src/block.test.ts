@@ -7,6 +7,7 @@ import {
   pageContentSchema,
   emptyPageContent,
   type Block,
+  isSymbolRef,
 } from "./block";
 import { ekText, ekImage, ekLink } from "./primitives";
 import { SCHEMA_VERSION } from "./version";
@@ -92,5 +93,32 @@ describe("blockSchema / pageContentSchema", () => {
     const c = emptyPageContent();
     expect(c).toEqual({ schemaVersion: SCHEMA_VERSION, blocks: [] });
     expect(pageContentSchema.safeParse(c).success).toBe(true);
+  });
+});
+
+describe("symbolRefSchema (V2-Contract-Vorbereitung, Roadmap 2.4)", () => {
+  it("akzeptiert Symbol-Knoten im Blocktree (Wire-Format)", () => {
+    const tree = {
+      schemaVersion: "0.1.0",
+      blocks: [
+        { id: "b1", type: "Hero", props: { headline: "x" } },
+        { id: "s1", type: "$symbol", symbolId: "sym-123" },
+      ],
+    };
+    expect(pageContentSchema.safeParse(tree).success).toBe(true);
+  });
+
+  it("verwirft Symbol-Knoten ohne symbolId", () => {
+    const tree = {
+      schemaVersion: "0.1.0",
+      blocks: [{ id: "s1", type: "$symbol" }],
+    };
+    expect(pageContentSchema.safeParse(tree).success).toBe(false);
+  });
+
+  it("isSymbolRef erkennt nur $symbol-Knoten", () => {
+    expect(isSymbolRef({ id: "s1", type: "$symbol", symbolId: "x" })).toBe(true);
+    expect(isSymbolRef({ id: "b1", type: "Hero", props: {} })).toBe(false);
+    expect(isSymbolRef(null)).toBe(false);
   });
 });

@@ -56,5 +56,18 @@ export const ekAssetRowSchema = z.object({
 });
 export type EkAssetRow = z.infer<typeof ekAssetRowSchema>;
 
+/**
+ * ek_globals: genau eine Zeile pro Site (id = 1, per CHECK erzwungen).
+ * `draft` ist per Spalten-GRANT nie öffentlich lesbar; anon/authenticated
+ * sehen nur id/published/updated_at (siehe CLI-Migration + ADR).
+ */
+export const ekGlobalsRowSchema = z.object({
+  id: z.number().int(),
+  draft: z.record(z.string(), z.unknown()).nullable(),
+  published: z.record(z.string(), z.unknown()).nullable(),
+  updated_at: z.string(),
+});
+export type EkGlobalsRow = z.infer<typeof ekGlobalsRowSchema>;
+
 /** Storage-Bucket, in dem das CLI Assets ablegt. */
 export const EK_ASSETS_BUCKET = "ek-assets";
