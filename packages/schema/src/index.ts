@@ -121,3 +121,14 @@ export {
 } from "./protocol";
 
 export { RICH_TEXT_ALLOWLIST, sanitizeRichText } from "./rich-text";
+
+export {
+  initMigration,
+  i18nMigration,
+  globalsMigration,
+  symbolsMigration,
+  collectionsMigration,
+  ekMigrations,
+  EK_MIGRATIONS,
+  type EkMigration,
+} from "./migrations";
