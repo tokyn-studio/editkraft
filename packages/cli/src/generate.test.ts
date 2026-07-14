@@ -12,6 +12,7 @@ describe("generateFiles", () => {
       "supabase/migrations/20260101000001_editkraft_i18n.sql",
       // Two seconds after init, sorts (and applies) after i18n.
       "supabase/migrations/20260101000002_editkraft_globals.sql",
+      "supabase/migrations/20260101000003_editkraft_symbols.sql",
       "editkraft.config.ts",
       "blocks/registry.ts",
       "blocks/Hero.tsx",

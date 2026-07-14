@@ -1,4 +1,4 @@
-import { migrationSql, i18nMigration, globalsMigration } from "./templates/migration";
+import { migrationSql, i18nMigration, globalsMigration, symbolsMigration } from "./templates/migration";
 import {
   DEFAULT_LOCALE,
   editkraftConfig,
@@ -62,6 +62,12 @@ export function generateFiles(options: GenerateOptions): FileSpec[] {
       // installations pick it up additively; +2s so it sorts after i18n.
       path: `supabase/migrations/${incrementTimestamp(incrementTimestamp(options.timestamp))}_editkraft_globals.sql`,
       content: globalsMigration(),
+    },
+    {
+      // Fourth migration: reserved Symbols table (Roadmap 2.4, unused in v1);
+      // +3s so it sorts after globals.
+      path: `supabase/migrations/${incrementTimestamp(incrementTimestamp(incrementTimestamp(options.timestamp)))}_editkraft_symbols.sql`,
+      content: symbolsMigration(),
     },
     { path: "editkraft.config.ts", content: editkraftConfig() },
     { path: `${base}blocks/registry.ts`, content: registryTs() },

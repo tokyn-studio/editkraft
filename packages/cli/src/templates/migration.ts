@@ -193,6 +193,32 @@ create index if not exists ek_pages_translation_group_idx
  * Spalten-GRANT: anon/authenticated sehen nur id/published/updated_at.
  * Supabase-Default-Privileges werden vorher explizit zurückgenommen.
  */
+export function symbolsMigration(): string {
+  return `-- Editkraft Symbols (reserviert für V2, Roadmap 2.4): wiederverwendbare Blöcke.
+-- Additive; safe to run on existing installations. In v1 ungenutzt —
+-- der Renderer wirft für $symbol-Knoten SYMBOLS_UNSUPPORTED.
+
+create table if not exists public.ek_symbols (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  content jsonb not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+drop trigger if exists ek_symbols_set_updated_at on public.ek_symbols;
+create trigger ek_symbols_set_updated_at before update on public.ek_symbols
+  for each row execute function public.ek_set_updated_at();
+
+alter table public.ek_symbols enable row level security;
+
+-- V1: kein öffentlicher Zugriff (keine Policies für anon/authenticated);
+-- Schreiben/Lesen nur Service-Role. Die Published-Lese-Policy kommt mit V2.
+revoke all on public.ek_symbols from anon, authenticated;
+grant all on public.ek_symbols to service_role;
+`;
+}
+
 export function globalsMigration(): string {
   return `-- Editkraft Site-Globals: eine Zeile pro Site, draft/published getrennt.
 -- Additive; safe to run on existing installations.
