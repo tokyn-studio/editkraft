@@ -1,5 +1,11 @@
 # @editkraft/schema
 
+## 0.8.0
+
+### Minor Changes
+
+- 987bae5: Migrations-SQL als Contract exportiert: `initMigration`, `i18nMigration`, `globalsMigration`, `symbolsMigration`, `collectionsMigration` sowie `ekMigrations()`/`EK_MIGRATIONS` liefern die fünf ek\_-Migrationen (Name + SQL) aus @editkraft/schema. Das CLI konsumiert die SQL von dort; die generierten Migrationsdateien bleiben byte-identisch.
+
 ## 0.7.0
 
 ### Minor Changes
