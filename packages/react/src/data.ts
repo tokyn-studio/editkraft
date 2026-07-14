@@ -175,6 +175,231 @@ export async function loadPublishedPage(
   };
 }
 
+// --- Collections (Roadmap 2.8) -----------------------------------------------
+
+/** One published collection item (the `published_data` snapshot view). */
+export interface CollectionItem {
+  id: string;
+  slug: string;
+  /** BCP-47 language tag of the item. */
+  locale: string;
+  /** Published field values (inkl. richText-HTML body), shaped by the collection's schema. */
+  data: Record<string, unknown>;
+  publishedAt: string | null;
+  sortOrder: number | null;
+}
+
+export interface CollectionListOptions {
+  /**
+   * BCP-47 locale to load. Without it, the lookup is NOT narrowed by locale —
+   * on a multi-locale site the list then contains every locale's items.
+   * Multi-locale sites should always pass `locale`.
+   */
+  locale?: string;
+  /**
+   * Locale to fall back to when `locale` yields no published items. Only used
+   * when both `locale` and `defaultLocale` are set and differ — the same
+   * contract as `loadPublishedPage`.
+   */
+  defaultLocale?: string;
+  /** Maximum number of items to return. */
+  limit?: number;
+  /** Override for the default ordering (`sort_order` nulls last, then `published_at` desc). */
+  order?: { column: string; ascending?: boolean };
+}
+
+/** Options for `getCollectionItem` — same locale contract as `loadPublishedPage`. */
+export interface CollectionItemOptions {
+  /**
+   * BCP-47 locale to load. Without it, rows are ordered by `locale` ascending
+   * and the first is taken deterministically (same legacy no-locale semantics
+   * as `loadPublishedPage` — see the B2/B3 notes above).
+   */
+  locale?: string;
+  /** Locale to fall back to when no published item exists for `locale`. */
+  defaultLocale?: string;
+}
+
+const COLLECTION_ITEM_SELECT = "id, slug, locale, published_data, published_at, sort_order";
+
+function collectionError(slug: string, message: string): EditkraftError {
+  return new EditkraftError(
+    "CONTENT_INVALID",
+    `Error loading collection "${slug}": ${message}`,
+  );
+}
+
+/** Resolves a collection slug to its id (`ek_collections.slug` is unique). */
+async function collectionIdBySlug(
+  supabase: SupabaseClient,
+  slug: string,
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from("ek_collections")
+    .select("id")
+    .eq("slug", slug)
+    .maybeSingle();
+  if (error) throw collectionError(slug, error.message);
+  return (data?.id as string | undefined) ?? null;
+}
+
+/**
+ * Published-only item query: RLS already restricts anon reads to rows with
+ * `published_data is not null`, but the filter is repeated here explicitly so
+ * a service-role client (which bypasses RLS) never leaks drafts either.
+ */
+function selectPublishedItems(
+  supabase: SupabaseClient,
+  collectionId: string,
+  options: CollectionListOptions,
+  locale?: string,
+) {
+  let query = supabase
+    .from("ek_collection_items")
+    .select(COLLECTION_ITEM_SELECT)
+    .eq("collection_id", collectionId)
+    .not("published_data", "is", null);
+  if (locale) query = query.eq("locale", locale);
+  if (options.order) {
+    query = query.order(options.order.column, {
+      ascending: options.order.ascending ?? true,
+    });
+  } else {
+    // Default: manuelle Reihenfolge zuerst (sort_order, NULLs ans Ende),
+    // dann die neuesten Artikel oben.
+    query = query
+      .order("sort_order", { ascending: true, nullsFirst: false })
+      .order("published_at", { ascending: false });
+  }
+  if (options.limit) query = query.limit(options.limit);
+  return query;
+}
+
+function rowToCollectionItem(row: Record<string, unknown>): CollectionItem {
+  return {
+    id: row.id as string,
+    slug: row.slug as string,
+    locale: row.locale as string,
+    data: (row.published_data ?? {}) as Record<string, unknown>,
+    publishedAt: (row.published_at as string | null) ?? null,
+    sortOrder: (row.sort_order as number | null) ?? null,
+  };
+}
+
+/**
+ * Loads the published items of a collection from the customer's Supabase
+ * (published-only: rows with a `published_data` snapshot). Returns an empty
+ * array when the collection is unknown or has no published items.
+ *
+ * With `options.locale` set, the lookup is narrowed to that locale; when it
+ * yields no items and `options.defaultLocale` is set (and differs), a second
+ * query is made for the default locale — the same fallback contract as
+ * `loadPublishedPage` (list-level: fallback on an EMPTY list, not per item).
+ */
+export async function getCollection(
+  supabase: SupabaseClient,
+  slug: string,
+  options: CollectionListOptions = {},
+): Promise<CollectionItem[]> {
+  const collectionId = await collectionIdBySlug(supabase, slug);
+  if (!collectionId) return [];
+
+  let { data, error } = await selectPublishedItems(
+    supabase,
+    collectionId,
+    options,
+    options.locale,
+  );
+  if (error) throw collectionError(slug, error.message);
+
+  if (
+    (!data || data.length === 0) &&
+    options.locale &&
+    options.defaultLocale &&
+    options.locale !== options.defaultLocale
+  ) {
+    const fallback = await selectPublishedItems(
+      supabase,
+      collectionId,
+      options,
+      options.defaultLocale,
+    );
+    data = fallback.data;
+    error = fallback.error;
+    if (error) throw collectionError(slug, error.message);
+  }
+
+  return ((data ?? []) as Record<string, unknown>[]).map(rowToCollectionItem);
+}
+
+/**
+ * Single-item lookup, mirroring `selectPageBySlug`'s no-locale semantics:
+ * without `locale`, rows are ordered by `locale` ascending and the first is
+ * taken deterministically instead of letting a multi-row match throw PGRST116.
+ */
+function selectPublishedItemBySlug(
+  supabase: SupabaseClient,
+  collectionId: string,
+  itemSlug: string,
+  locale?: string,
+) {
+  let query = supabase
+    .from("ek_collection_items")
+    .select(COLLECTION_ITEM_SELECT)
+    .eq("collection_id", collectionId)
+    .eq("slug", itemSlug)
+    .not("published_data", "is", null);
+  if (locale) {
+    query = query.eq("locale", locale);
+  } else {
+    query = query.order("locale", { ascending: true }).limit(1);
+  }
+  return query.maybeSingle();
+}
+
+/**
+ * Loads ONE published collection item by its slug, or null when the collection
+ * or the item is unknown / not published. Locale + fallback semantics are the
+ * same as `loadPublishedPage` (`locale` narrows; empty + `defaultLocale` set
+ * and different → second query for the default locale).
+ */
+export async function getCollectionItem(
+  supabase: SupabaseClient,
+  collectionSlug: string,
+  itemSlug: string,
+  options: CollectionItemOptions = {},
+): Promise<CollectionItem | null> {
+  const collectionId = await collectionIdBySlug(supabase, collectionSlug);
+  if (!collectionId) return null;
+
+  let { data, error } = await selectPublishedItemBySlug(
+    supabase,
+    collectionId,
+    itemSlug,
+    options.locale,
+  );
+  if (error) throw collectionError(collectionSlug, error.message);
+
+  if (
+    !data &&
+    options.locale &&
+    options.defaultLocale &&
+    options.locale !== options.defaultLocale
+  ) {
+    const fallback = await selectPublishedItemBySlug(
+      supabase,
+      collectionId,
+      itemSlug,
+      options.defaultLocale,
+    );
+    data = fallback.data;
+    error = fallback.error;
+    if (error) throw collectionError(collectionSlug, error.message);
+  }
+
+  return data ? rowToCollectionItem(data as Record<string, unknown>) : null;
+}
+
 /** ISR cache tag for a page. The revalidate handler invalidates exactly this tag. */
 export function pageTag(slug: string): string {
   return `editkraft:page:${slug}`;

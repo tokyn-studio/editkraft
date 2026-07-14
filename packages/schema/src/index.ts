@@ -45,6 +45,18 @@ export {
 } from "./block";
 
 export {
+  COLLECTION_BLOCK_PREFIX,
+  collectionSlugOfBlockType,
+  defineCollection,
+  isCollectionBlockType,
+  itemToBlock,
+  validateItemData,
+  type CollectionDefinition,
+  type CollectionDefinitionInput,
+  type CollectionFieldDescriptor,
+} from "./collections";
+
+export {
   SCHEMA_VERSION,
   satisfies,
   isCompatible,

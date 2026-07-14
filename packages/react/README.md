@@ -154,6 +154,77 @@ Call this endpoint from a Supabase webhook on publish; it's secured with a
 shared secret and invalidates the ISR cache tag for the affected page
 (`pageTag(slug)`).
 
+## Collections
+
+Collections model structured item types like a blog: items with fixed fields
+(ek primitives) plus a richText body, stored in `ek_collections` /
+`ek_collection_items`. Define the collection in `@editkraft/schema` and
+register it together with an item template:
+
+```tsx
+import { defineCollection, ekImage, ekRichText, ekText } from "@editkraft/schema";
+import { createRegistry } from "@editkraft/react";
+import { z } from "zod";
+
+export const blog = defineCollection({
+  slug: "blog",
+  name: "Blog",
+  schema: z.object({
+    title: ekText({ label: "Title" }),
+    cover: ekImage({ label: "Cover" }).optional(),
+    body: ekRichText({ label: "Body" }),
+  }),
+});
+
+// Template: receives { item } and marks fields with data-ek-field —
+// exactly like a block component.
+export function Article({ item }: { item: { title: string; body: string } }) {
+  return (
+    <article>
+      <h1 data-ek-field="title">{item.title}</h1>
+      <div data-ek-field="body" dangerouslySetInnerHTML={{ __html: item.body }} />
+    </article>
+  );
+}
+
+export const registry = createRegistry([
+  // ...block entries...
+  { collection: blog, template: Article },
+]);
+```
+
+`createRegistry` validates collection entries (template present, unique slug,
+no collision with block types) and exposes them via
+`registry.getCollection(slug)`. Internally each collection is also registered
+as a synthetic block type `"$collection:<slug>"`, which is how the preview
+bridge edits items inline without a second code path.
+
+Load published items in your routes:
+
+```ts
+import { getCollection, getCollectionItem } from "@editkraft/react";
+
+// List: published items only, ordered sort_order (nulls last), then published_at desc.
+const posts = await getCollection(supabase, "blog", {
+  locale: "de",
+  defaultLocale: "de",
+  limit: 20,            // optional
+  // order: { column: "published_at", ascending: false },  // optional override
+});
+// → { id, slug, locale, data, publishedAt, sortOrder }[]
+
+// Detail: one published item or null. Same locale fallback as loadPublishedPage.
+const post = await getCollectionItem(supabase, "blog", params.slug, {
+  locale: "de",
+  defaultLocale: "de",
+});
+```
+
+For the Studio's item mode, the scaffolded preview route builds a synthetic
+one-block tree with `itemToBlock(collectionSlug, itemId, draftData)` (from
+`@editkraft/schema`) and passes it to `EditkraftPreview` as regular `content`
+— inline editing, toolbar and popovers work unchanged.
+
 ## Preview bridge
 
 `@editkraft/react/preview` exports `EditkraftPreview`, a client component used

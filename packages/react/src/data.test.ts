@@ -8,6 +8,8 @@ import {
   loadGlobals,
   loadDraftGlobals,
   defaultSupportedRange,
+  getCollection,
+  getCollectionItem,
   pageTag,
   globalsTag,
   getAlternateLocales,
@@ -492,6 +494,295 @@ describe("loadDraftContent", () => {
     } as unknown as SupabaseClient;
 
     await expect(loadDraftContent(supabase, "start")).rejects.toMatchObject({
+      code: "CONTENT_INVALID",
+    });
+  });
+});
+
+/**
+ * Fake für die Collections-Tabellen, im Stil von `fakeSupabaseTable`, aber mit
+ * den zusätzlich benötigten Query-Features: `.not("col", "is", null)`
+ * (published-only-Filter) und MULTI-KEY-Ordering inkl. `nullsFirst` — mehrere
+ * `.order()`-Aufrufe wirken wie bei PostgREST als ein zusammengesetzter
+ * Sortierschlüssel (nicht als sequentielle Re-Sorts), deshalb werden die
+ * Orderings gesammelt und erst bei der Materialisierung angewendet.
+ */
+function fakeCollectionsDb(tables: Record<string, Record<string, unknown>[]>): SupabaseClient {
+  return {
+    from(table: string) {
+      let rows = [...(tables[table] ?? [])];
+      let limitN: number | null = null;
+      const orderings: { field: string; dir: 1 | -1; nullsFirst: boolean }[] = [];
+      const builder: Record<string, unknown> = {};
+
+      const materialize = () => {
+        let out = [...rows];
+        if (orderings.length > 0) {
+          out.sort((a, b) => {
+            for (const o of orderings) {
+              const av = a[o.field];
+              const bv = b[o.field];
+              if (av === bv) continue;
+              if (av == null) return o.nullsFirst ? -1 : 1;
+              if (bv == null) return o.nullsFirst ? 1 : -1;
+              return ((av as never) > (bv as never) ? 1 : -1) * o.dir;
+            }
+            return 0;
+          });
+        }
+        if (limitN !== null) out = out.slice(0, limitN);
+        return out;
+      };
+
+      builder.select = () => builder;
+      builder.eq = (field: string, value: unknown) => {
+        rows = rows.filter((r) => r[field] === value);
+        return builder;
+      };
+      builder.not = (field: string, op: string, value: unknown) => {
+        if (op === "is" && value === null) rows = rows.filter((r) => r[field] != null);
+        return builder;
+      };
+      builder.order = (field: string, opts?: { ascending?: boolean; nullsFirst?: boolean }) => {
+        const dir: 1 | -1 = opts?.ascending === false ? -1 : 1;
+        // Postgres-Default: NULLs gelten als größte Werte (asc → last, desc → first).
+        orderings.push({ field, dir, nullsFirst: opts?.nullsFirst ?? dir === -1 });
+        return builder;
+      };
+      builder.limit = (n: number) => {
+        limitN = n;
+        return builder;
+      };
+      builder.maybeSingle = async () => {
+        const out = materialize();
+        if (out.length > 1) {
+          return {
+            data: null,
+            error: {
+              code: "PGRST116",
+              message: "JSON object requested, multiple (or no) rows returned",
+            },
+          };
+        }
+        return { data: out[0] ?? null, error: null };
+      };
+      builder.then = (resolve: (v: { data: unknown; error: unknown }) => void) =>
+        resolve({ data: materialize(), error: null });
+      return builder as never;
+    },
+  } as unknown as SupabaseClient;
+}
+
+const blogCollection = { id: "c1", slug: "blog", name: "Blog" };
+const blogItems = [
+  {
+    id: "i1",
+    collection_id: "c1",
+    slug: "hello-world",
+    locale: "de",
+    draft_data: { title: "Hallo (Draft)", body: "<p>Draft</p>" },
+    published_data: { title: "Hallo Welt", body: "<p>Publiziert</p>" },
+    published_at: "2026-07-01T00:00:00Z",
+    sort_order: null,
+  },
+  {
+    id: "i2",
+    collection_id: "c1",
+    slug: "second-post",
+    locale: "de",
+    draft_data: { title: "Zweiter (Draft)" },
+    published_data: { title: "Zweiter Beitrag", body: "<p>Zwei</p>" },
+    published_at: "2026-07-05T00:00:00Z",
+    sort_order: null,
+  },
+  {
+    // Draft-only: published_data ist null → darf NIE auftauchen.
+    id: "i3",
+    collection_id: "c1",
+    slug: "draft-only",
+    locale: "de",
+    draft_data: { title: "Unveröffentlicht" },
+    published_data: null,
+    published_at: null,
+    sort_order: null,
+  },
+  {
+    // Manuell einsortiert: sort_order schlägt published_at.
+    id: "i4",
+    collection_id: "c1",
+    slug: "pinned",
+    locale: "de",
+    draft_data: { title: "Pinned (Draft)" },
+    published_data: { title: "Angepinnt", body: "<p>Pin</p>" },
+    published_at: "2026-06-01T00:00:00Z",
+    sort_order: 1,
+  },
+  {
+    // Übersetzung: gleiche Collection, andere Locale.
+    id: "i5",
+    collection_id: "c1",
+    slug: "hello-world-en",
+    locale: "en",
+    draft_data: { title: "Hello (Draft)" },
+    published_data: { title: "Hello World", body: "<p>Published</p>" },
+    published_at: "2026-07-02T00:00:00Z",
+    sort_order: null,
+  },
+];
+
+describe("getCollection", () => {
+  it("liefert nur published Items in der Spec-Form {id, slug, locale, data, publishedAt, sortOrder}", async () => {
+    const supabase = fakeCollectionsDb({
+      ek_collections: [blogCollection],
+      ek_collection_items: blogItems,
+    });
+
+    const items = await getCollection(supabase, "blog", { locale: "de" });
+
+    expect(items.map((i) => i.slug)).not.toContain("draft-only");
+    expect(items.find((i) => i.slug === "hello-world")).toEqual({
+      id: "i1",
+      slug: "hello-world",
+      locale: "de",
+      data: { title: "Hallo Welt", body: "<p>Publiziert</p>" },
+      publishedAt: "2026-07-01T00:00:00Z",
+      sortOrder: null,
+    });
+    // data ist der published-Snapshot, nie draft_data.
+    expect(items.some((i) => JSON.stringify(i.data).includes("Draft"))).toBe(false);
+  });
+
+  it("sortiert default sort_order nulls last, dann published_at desc", async () => {
+    const supabase = fakeCollectionsDb({
+      ek_collections: [blogCollection],
+      ek_collection_items: blogItems,
+    });
+
+    const items = await getCollection(supabase, "blog", { locale: "de" });
+
+    expect(items.map((i) => i.slug)).toEqual(["pinned", "second-post", "hello-world"]);
+  });
+
+  it("respektiert limit und eine explizite order-Option", async () => {
+    const supabase = fakeCollectionsDb({
+      ek_collections: [blogCollection],
+      ek_collection_items: blogItems,
+    });
+
+    const items = await getCollection(supabase, "blog", {
+      locale: "de",
+      order: { column: "published_at", ascending: true },
+      limit: 2,
+    });
+
+    expect(items.map((i) => i.slug)).toEqual(["pinned", "hello-world"]);
+  });
+
+  it("filtert auf die angefragte Locale", async () => {
+    const supabase = fakeCollectionsDb({
+      ek_collections: [blogCollection],
+      ek_collection_items: blogItems,
+    });
+
+    const items = await getCollection(supabase, "blog", { locale: "en" });
+
+    expect(items.map((i) => i.slug)).toEqual(["hello-world-en"]);
+  });
+
+  it("fällt auf defaultLocale zurück, wenn die Ziel-Locale keine published Items hat", async () => {
+    const supabase = fakeCollectionsDb({
+      ek_collections: [blogCollection],
+      ek_collection_items: blogItems,
+    });
+
+    const items = await getCollection(supabase, "blog", {
+      locale: "fr",
+      defaultLocale: "de",
+    });
+
+    expect(items).toHaveLength(3);
+    expect(items.every((i) => i.locale === "de")).toBe(true);
+  });
+
+  it("gibt [] für eine unbekannte Collection zurück", async () => {
+    const supabase = fakeCollectionsDb({
+      ek_collections: [blogCollection],
+      ek_collection_items: blogItems,
+    });
+    expect(await getCollection(supabase, "gibt-es-nicht")).toEqual([]);
+  });
+});
+
+describe("getCollectionItem", () => {
+  const db = () =>
+    fakeCollectionsDb({
+      ek_collections: [blogCollection],
+      ek_collection_items: blogItems,
+    });
+
+  it("liefert das published Item", async () => {
+    const item = await getCollectionItem(db(), "blog", "hello-world", { locale: "de" });
+    expect(item).toEqual({
+      id: "i1",
+      slug: "hello-world",
+      locale: "de",
+      data: { title: "Hallo Welt", body: "<p>Publiziert</p>" },
+      publishedAt: "2026-07-01T00:00:00Z",
+      sortOrder: null,
+    });
+  });
+
+  it("gibt null für ein nie publiziertes Item zurück (published-only)", async () => {
+    expect(await getCollectionItem(db(), "blog", "draft-only", { locale: "de" })).toBeNull();
+  });
+
+  it("gibt null für unbekannte Collection oder unbekannten Item-Slug zurück", async () => {
+    expect(await getCollectionItem(db(), "nope", "hello-world")).toBeNull();
+    expect(await getCollectionItem(db(), "blog", "nope", { locale: "de" })).toBeNull();
+  });
+
+  it("fällt auf defaultLocale zurück, wenn die Ziel-Locale das Item nicht published hat", async () => {
+    const item = await getCollectionItem(db(), "blog", "hello-world", {
+      locale: "en",
+      defaultLocale: "de",
+    });
+    expect(item?.locale).toBe("de");
+    expect(item?.data.title).toBe("Hallo Welt");
+  });
+
+  it("ohne locale: deterministische Wahl (locale aufsteigend) statt PGRST116 bei Locale-Geschwistern", async () => {
+    const siblings = [
+      { ...blogItems[0]!, id: "s1", slug: "same", locale: "de" },
+      { ...blogItems[0]!, id: "s2", slug: "same", locale: "en" },
+    ];
+    const supabase = fakeCollectionsDb({
+      ek_collections: [blogCollection],
+      ek_collection_items: siblings,
+    });
+
+    const item = await getCollectionItem(supabase, "blog", "same");
+
+    expect(item?.locale).toBe("de");
+  });
+
+  it("propagiert einen echten Query-Fehler als EditkraftError", async () => {
+    const supabase: SupabaseClient = {
+      from(table: string) {
+        const builder: Record<string, unknown> = {};
+        for (const m of ["select", "order", "limit", "not"]) builder[m] = () => builder;
+        builder.eq = () => builder;
+        builder.maybeSingle = async () =>
+          table === "ek_collections"
+            ? { data: null, error: { code: "PGRST301", message: "boom" } }
+            : { data: null, error: null };
+        return builder as never;
+      },
+    } as unknown as SupabaseClient;
+
+    await expect(getCollectionItem(supabase, "blog", "x")).rejects.toMatchObject({
+      code: "CONTENT_INVALID",
+    });
+    await expect(getCollection(supabase, "blog")).rejects.toMatchObject({
       code: "CONTENT_INVALID",
     });
   });
