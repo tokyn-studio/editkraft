@@ -190,7 +190,7 @@ export function previewRoute(): string {
   return `import { notFound } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 import { loadDraftContent } from "@editkraft/react";
-import { verifyDraftToken } from "@editkraft/schema";
+import { SCHEMA_VERSION, itemToBlock, verifyDraftToken } from "@editkraft/schema";
 import { PreviewClient } from "../preview-client";
 import editkraftConfig from "@/editkraft.config";
 
@@ -205,15 +205,19 @@ import editkraftConfig from "@/editkraft.config";
  * @editkraft/react 0.5.2+ still resolves deterministically instead of
  * throwing once a slug has 2+ locale rows, but multi-locale sites should
  * pass \`locale\` explicitly so the correct translation's draft is shown.
+ *
+ * Collection items (\`?collection=blog&item=<slug>\`): loads the DRAFT item
+ * and frames it as a synthetic one-block tree — the registered collection
+ * template renders it and the whole inline-editing bridge works unchanged.
  */
 export default async function EditkraftPreviewPage({
   params,
   searchParams,
 }: {
   params: Promise<{ slug?: string[] }>;
-  searchParams: Promise<{ token?: string; locale?: string }>;
+  searchParams: Promise<{ token?: string; locale?: string; collection?: string; item?: string }>;
 }) {
-  const { token, locale } = await searchParams;
+  const { token, locale, collection, item } = await searchParams;
   const secret = process.env.EDITKRAFT_PREVIEW_SECRET;
   if (!secret || !token || !(await verifyDraftToken(token, secret))) notFound();
 
@@ -224,6 +228,34 @@ export default async function EditkraftPreviewPage({
     { auth: { persistSession: false } },
   );
 
+  const studioOrigin = process.env.NEXT_PUBLIC_EDITKRAFT_STUDIO_ORIGIN ?? "";
+
+  if (collection && item) {
+    const { data: col } = await supabase
+      .from("ek_collections")
+      .select("id")
+      .eq("slug", collection)
+      .maybeSingle();
+    if (!col) notFound();
+
+    let query = supabase
+      .from("ek_collection_items")
+      .select("id, draft_data")
+      .eq("collection_id", col.id)
+      .eq("slug", item);
+    query = locale
+      ? query.eq("locale", locale)
+      : query.order("locale", { ascending: true }).limit(1);
+    const { data: row } = await query.maybeSingle();
+    if (!row) notFound();
+
+    const content = {
+      schemaVersion: SCHEMA_VERSION,
+      blocks: [itemToBlock(collection, row.id as string, row.draft_data as Record<string, unknown>)],
+    };
+    return <PreviewClient content={content} studioOrigin={studioOrigin} />;
+  }
+
   const page = await loadDraftContent(supabase, slug?.join("/") ?? "", {
     ...(locale ? { locale } : {}),
     ...(editkraftConfig.defaultLocale ? { defaultLocale: editkraftConfig.defaultLocale } : {}),
@@ -233,7 +265,7 @@ export default async function EditkraftPreviewPage({
   return (
     <PreviewClient
       content={page.content}
-      studioOrigin={process.env.NEXT_PUBLIC_EDITKRAFT_STUDIO_ORIGIN ?? ""}
+      studioOrigin={studioOrigin}
     />
   );
 }
