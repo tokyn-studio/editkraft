@@ -248,6 +248,10 @@ create policy "ek public reads published globals"
   using (published is not null);
 
 insert into public.ek_globals (id) values (1) on conflict (id) do nothing;
+`;
+}
+
+/**
  * Collections migration (Roadmap 2.8): `ek_collections` + `ek_collection_items`
  * for structured, repeatable content (blog posts, …). Ships as a separate
  * migration so existing installations can apply it independently.

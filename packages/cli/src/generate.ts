@@ -68,11 +68,11 @@ export function generateFiles(options: GenerateOptions): FileSpec[] {
       // +3s so it sorts after globals.
       path: `supabase/migrations/${incrementTimestamp(incrementTimestamp(incrementTimestamp(options.timestamp)))}_editkraft_symbols.sql`,
       content: symbolsMigration(),
+    },
     {
       // Fifth migration (Collections) — +4s so it sorts after symbols.
       path: `supabase/migrations/${incrementTimestamp(incrementTimestamp(incrementTimestamp(incrementTimestamp(options.timestamp))))}_editkraft_collections.sql`,
       content: collectionsMigration(DEFAULT_LOCALE),
-    },
     },
     { path: "editkraft.config.ts", content: editkraftConfig() },
     { path: `${base}blocks/registry.ts`, content: registryTs() },

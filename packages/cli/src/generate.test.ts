@@ -97,10 +97,12 @@ describe("generateFiles", () => {
     expect(globals!.content).not.toMatch(/grant select \([^)]*draft/);
     // Die Einzelzeile wird direkt angelegt (Upsert-Ziel für das Studio):
     expect(globals!.content).toContain("insert into public.ek_globals (id) values (1)");
-  it("emits the collections migration as a third, separate file", () => {
+  });
+
+  it("emits the collections migration as a fifth, separate file", () => {
     const files = generateFiles({ timestamp: "20260710120000", srcDir: false });
     const collections = files.find(
-      (f) => f.path === "supabase/migrations/20260710120002_editkraft_collections.sql",
+      (f) => f.path === "supabase/migrations/20260710120004_editkraft_collections.sql",
     );
     expect(collections).toBeDefined();
     expect(collections!.content).toContain("create table if not exists public.ek_collections");

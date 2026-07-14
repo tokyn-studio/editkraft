@@ -487,6 +487,53 @@ describe("Site-Globals", () => {
     const post = vi.spyOn(window.parent, "postMessage");
     const { container } = renderWithGlobals();
     const el = globalEl(container, "phone");
+    post.mockClear();
+    act(() => {
+      el.focus();
+      el.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+      el.textContent = "0151 999";
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      vi.advanceTimersByTime(400);
+    });
+    const upd = post.mock.calls
+      .map((c) => c[0] as { type: string; values?: Record<string, unknown> })
+      .find((x) => x.type === "ek:global-update");
+    expect(upd?.values).toEqual({ phone: "0151 999" });
+    post.mockRestore();
+    vi.useRealTimers();
+  });
+
+  it("eingehendes ek:global-update aktualisiert die Canvas-Vorkommen", async () => {
+    const { container } = renderWithGlobals();
+    dispatchFromStudio(createMessage("ek:global-update", { values: { phone: "0700 42" } }));
+    await waitFor(() => expect(globalEl(container, "phone").textContent).toBe("0700 42"));
+  });
+
+  it("Echo-Guard: eingehendes ek:global-update überschreibt das fokussierte Global nicht", () => {
+    const { container } = renderWithGlobals();
+    const el = globalEl(container, "phone");
+    act(() => {
+      el.focus();
+      el.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+      el.textContent = "Vom Nutzer getippt";
+    });
+    dispatchFromStudio(createMessage("ek:global-update", { values: { phone: "Echo vom Studio" } }));
+    expect(globalEl(container, "phone").textContent).toBe("Vom Nutzer getippt");
+  });
+
+  it("Verlassen des Globals-Felds übernimmt den Wert in den State (alle Vorkommen)", async () => {
+    const { container } = renderWithGlobals();
+    const el = globalEl(container, "phone");
+    act(() => {
+      el.focus();
+      el.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+      el.textContent = "0800 7";
+      el.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+    });
+    await waitFor(() => expect(globalEl(container, "phone").textContent).toBe("0800 7"));
+  });
+});
+
 // --- Item-Modus (Collections): synthetischer Ein-Block-Baum ------------------
 // Die Preview-Seite baut den Baum via itemToBlock und übergibt ihn als ganz
 // normales `content` — EditkraftPreview braucht keinen eigenen Item-Pfad, weil
@@ -559,14 +606,6 @@ describe("EditkraftPreview — Item-Modus (Collections)", () => {
     act(() => {
       el.focus();
       el.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
-      el.textContent = "0151 999";
-      el.dispatchEvent(new Event("input", { bubbles: true }));
-      vi.advanceTimersByTime(400);
-    });
-    const upd = post.mock.calls
-      .map((c) => c[0] as { type: string; values?: Record<string, unknown> })
-      .find((x) => x.type === "ek:global-update");
-    expect(upd?.values).toEqual({ phone: "0151 999" });
       el.textContent = "Neuer Titel";
       el.dispatchEvent(new Event("input", { bubbles: true }));
       vi.advanceTimersByTime(400);
@@ -584,34 +623,6 @@ describe("EditkraftPreview — Item-Modus (Collections)", () => {
     vi.useRealTimers();
   });
 
-  it("eingehendes ek:global-update aktualisiert die Canvas-Vorkommen", async () => {
-    const { container } = renderWithGlobals();
-    dispatchFromStudio(createMessage("ek:global-update", { values: { phone: "0700 42" } }));
-    await waitFor(() => expect(globalEl(container, "phone").textContent).toBe("0700 42"));
-  });
-
-  it("Echo-Guard: eingehendes ek:global-update überschreibt das fokussierte Global nicht", () => {
-    const { container } = renderWithGlobals();
-    const el = globalEl(container, "phone");
-    act(() => {
-      el.focus();
-      el.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
-      el.textContent = "Vom Nutzer getippt";
-    });
-    dispatchFromStudio(createMessage("ek:global-update", { values: { phone: "Echo vom Studio" } }));
-    expect(globalEl(container, "phone").textContent).toBe("Vom Nutzer getippt");
-  });
-
-  it("Verlassen des Globals-Felds übernimmt den Wert in den State (alle Vorkommen)", async () => {
-    const { container } = renderWithGlobals();
-    const el = globalEl(container, "phone");
-    act(() => {
-      el.focus();
-      el.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
-      el.textContent = "0800 7";
-      el.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
-    });
-    await waitFor(() => expect(globalEl(container, "phone").textContent).toBe("0800 7"));
   it("ek:update aus dem Studio aktualisiert das Template live", async () => {
     render(<EditkraftPreview content={itemContent} registry={itemRegistry} studioOrigin={STUDIO} />);
     dispatchFromStudio(createMessage("ek:update", { blockId: "item-1", props: { title: "Live geändert" } }));
