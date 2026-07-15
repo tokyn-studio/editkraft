@@ -496,6 +496,80 @@ describe("Link-/Button-Klicks (nie navigieren, immer bearbeiten)", () => {
   });
 });
 
+describe("Popover schließt bei Außenklick/Escape", () => {
+  const linkPopover = (c: HTMLElement) => c.querySelector("[data-editkraft-link-popover]");
+  const inputByValue = (c: HTMLElement, value: string) =>
+    Array.from(c.querySelectorAll<HTMLInputElement>("[data-editkraft-link-popover] input")).find(
+      (i) => i.value === value,
+    );
+  const pointerDownOn = (el: Element) =>
+    act(() => {
+      el.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+    });
+
+  it("Klick daneben schließt das offene CTA-Popover", () => {
+    const { container } = render(<EditkraftPreview content={content} registry={registry} studioOrigin={STUDIO} />);
+    fireEvent.click(container.querySelector('[data-editkraft-block-id="b6"] a')!);
+    expect(linkPopover(container)).toBeTruthy();
+    pointerDownOn(document.body);
+    expect(linkPopover(container)).toBeNull();
+  });
+
+  it("Klick INS Popover schließt es nicht", () => {
+    const { container } = render(<EditkraftPreview content={content} registry={registry} studioOrigin={STUDIO} />);
+    fireEvent.click(container.querySelector('[data-editkraft-block-id="b6"] a')!);
+    const input = container.querySelector("[data-editkraft-link-popover] input")!;
+    pointerDownOn(input);
+    expect(linkPopover(container)).toBeTruthy();
+  });
+
+  it("Escape schließt das offene Popover", () => {
+    const { container } = render(<EditkraftPreview content={content} registry={registry} studioOrigin={STUDIO} />);
+    fireEvent.click(container.querySelector('[data-editkraft-block-id="b6"] a')!);
+    expect(linkPopover(container)).toBeTruthy();
+    act(() => {
+      fireEvent.keyDown(document, { key: "Escape" });
+    });
+    expect(linkPopover(container)).toBeNull();
+  });
+
+  it("Klick von einem offenen Popover direkt auf ein anderes Objekt: altes zu, neues auf", () => {
+    const { container } = render(<EditkraftPreview content={content} registry={registry} studioOrigin={STUDIO} />);
+    fireEvent.click(container.querySelector('[data-editkraft-block-id="b6"] a')!);
+    expect(inputByValue(container, "Jetzt starten")).toBeTruthy();
+    // Ein Gestus: pointerdown schließt das alte, der folgende click öffnet das neue.
+    const other = container.querySelector('[data-editkraft-block-id="b7"] a') as HTMLElement;
+    pointerDownOn(other);
+    fireEvent.click(other);
+    expect(linkPopover(container)).toBeTruthy();
+    expect(inputByValue(container, "Kontakt")).toBeTruthy();
+    expect(inputByValue(container, "Jetzt starten")).toBeUndefined();
+  });
+
+  it("Außenklick ÜBERNIMMT den geänderten Wert (kein Verwerfen)", () => {
+    const post = vi.spyOn(window.parent, "postMessage");
+    const { container } = render(<EditkraftPreview content={content} registry={registry} studioOrigin={STUDIO} />);
+    fireEvent.click(container.querySelector('[data-editkraft-block-id="b6"] a')!);
+    fireEvent.change(inputByValue(container, "/preise")!, { target: { value: "/neu" } });
+    post.mockClear();
+    pointerDownOn(document.body);
+    const upd = post.mock.calls
+      .map((c) => c[0] as { type: string; blockId?: string; props?: { cta?: { href?: string } } })
+      .find((x) => x.type === "ek:update" && x.blockId === "b6");
+    expect(upd?.props?.cta?.href).toBe("/neu");
+    expect(linkPopover(container)).toBeNull();
+    post.mockRestore();
+  });
+
+  it("schließt auch das Select-Popover bei Klick daneben", () => {
+    const { container } = render(<EditkraftPreview content={content} registry={registry} studioOrigin={STUDIO} />);
+    fireEvent.click(fieldEl(container, "b5", "icon"));
+    expect(container.querySelector("[data-editkraft-select-popover]")).toBeTruthy();
+    pointerDownOn(document.body);
+    expect(container.querySelector("[data-editkraft-select-popover]")).toBeNull();
+  });
+});
+
 describe("Site-Globals", () => {
   const globalsDefinition = defineGlobals({
     schema: z.object({ phone: ekText({ label: "Telefon" }), claim: ekText() }),

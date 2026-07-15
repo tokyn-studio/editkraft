@@ -1035,6 +1035,65 @@ export function EditkraftPreview({
     cropDragRef.current = null;
   };
 
+  // Bild-Popover per Außenklick verlassen: ausstehende URL/Alt übernehmen (der
+  // Nutzer erwartet, dass sein Eingabewert bleibt), dann schließen. Ein reiner
+  // Blur-Commit des Alt-Felds greift hier nicht, weil der pointerdown-Handler in
+  // der Capture-Phase VOR dem Feld-Blur läuft.
+  const commitImagePopoverOnDismiss = () => {
+    const ip = imagePopover;
+    if (!ip) return;
+    const cur = (findBlockById(ip.blockId)?.props?.[ip.fieldKey] ?? {}) as {
+      url?: string;
+      alt?: string;
+    };
+    const patch: Record<string, unknown> = {};
+    const url = ip.url.trim();
+    if (url && url !== (cur.url ?? "")) {
+      patch.url = url;
+      patch.assetId = "";
+    }
+    if ((cur.alt ?? "") !== ip.alt) patch.alt = ip.alt;
+    if (Object.keys(patch).length) mergeImageValue(ip.blockId, ip.fieldKey, patch);
+    closeImagePopover();
+  };
+
+  // Offenes Bearbeiten-Popover schließt bei Klick daneben und bei Escape.
+  // Innen-Klicks (Felder/Buttons/Tab-Leiste, auch die Toolbar) lassen es offen.
+  // Außenklick ÜBERNIMMT den Wert (wie das Verlassen einer Tabellenzelle),
+  // Escape verwirft ihn; der modale Crop-Modus bricht bei Außenklick ab, damit
+  // ein Streifklick nicht ungewollt einen Rahmen festschreibt.
+  useEffect(() => {
+    if (!linkPopover && !selectPopover && !imagePopover && !cropMode) return;
+    const INSIDE =
+      "[data-editkraft-link-popover],[data-editkraft-select-popover]," +
+      "[data-editkraft-image-popover],[data-editkraft-crop-surface]," +
+      "[data-editkraft-crop-controls],[data-editkraft-toolbar]";
+    const onPointerDown = (e: PointerEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t?.closest?.(INSIDE)) return;
+      if (cropMode) cancelCrop();
+      else if (linkPopover) saveLink();
+      else if (imagePopover) commitImagePopoverOnDismiss();
+      else if (selectPopover) closeSelectPopover();
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (cropMode) cancelCrop();
+      else if (linkPopover) closeLinkPopover();
+      else if (imagePopover) closeImagePopover();
+      else if (selectPopover) closeSelectPopover();
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown, true);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+    // Absicht: nur bei Popover-Wechsel neu abonnieren; die Commit-/Close-Funktionen
+    // schließen über genau diese States.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linkPopover, selectPopover, imagePopover, cropMode]);
+
   // Toolbar-Bausteine (createElement, Inline-Styles – die Preview ist die Kundenseite).
   const linkIcon: ReactNode = createElement(
     "svg",
