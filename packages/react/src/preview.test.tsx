@@ -8,6 +8,7 @@ import {
   defineCollection,
   defineGlobals,
   ekImage,
+  ekLink,
   ekRichText,
   ekSelect,
   ekText,
@@ -34,6 +35,23 @@ function Banner({ image }: { image: { url?: string; alt?: string } }) {
 function Icon({ icon }: { icon: string }) {
   return <span data-ek-field="icon">{icon}</span>;
 }
+// CTA-Button: data-ek-field sitzt DIREKT auf dem <a>.
+function Cta({ cta }: { cta: { href?: string; label?: string } }) {
+  return <a data-ek-field="cta" href={cta?.href ?? "#"}>{cta?.label ?? ""}</a>;
+}
+// CTA-Button mit Wrapper: data-ek-field auf dem <div>, der <a> liegt darin und
+// trägt ein <span>-Label (verschachtelter Klick-Fall).
+function CtaWrapper({ cta }: { cta: { href?: string; label?: string } }) {
+  return (
+    <div data-ek-field="cta">
+      <a href={cta?.href ?? "#"}><span>{cta?.label ?? ""}</span></a>
+    </div>
+  );
+}
+// Link ganz ohne editierbares Feld (kein data-ek-field) – nur Navigation schlucken.
+function Naked() {
+  return <div><a href="/extern">Extern</a></div>;
+}
 const registry = createRegistry([
   { definition: defineBlock({ type: "Hero", label: "Hero", schema: z.object({ headline: ekText() }) }), component: Hero },
   { definition: defineBlock({ type: "Text", label: "Text", schema: z.object({ body: ekText() }) }), component: Text },
@@ -47,6 +65,9 @@ const registry = createRegistry([
     }),
     component: Icon,
   },
+  { definition: defineBlock({ type: "Cta", label: "Button", schema: z.object({ cta: ekLink() }) }), component: Cta },
+  { definition: defineBlock({ type: "CtaWrapper", label: "Button (Wrapper)", schema: z.object({ cta: ekLink() }) }), component: CtaWrapper },
+  { definition: defineBlock({ type: "Naked", label: "Naked", schema: z.object({}) }), component: Naked },
 ]);
 
 const content: PageContent = {
@@ -57,6 +78,12 @@ const content: PageContent = {
     { id: "b3", type: "Prose", props: { body: "<strong>fett</strong> normal" } },
     { id: "b4", type: "Banner", props: { image: { assetId: "", url: "" } } },
     { id: "b5", type: "Icon", props: { icon: "bolt" } },
+    { id: "b6", type: "Cta", props: { cta: { href: "/preise", label: "Jetzt starten" } } },
+    { id: "b7", type: "CtaWrapper", props: { cta: { href: "/kontakt", label: "Kontakt" } } },
+    // richText mit Inline-Link – Label kommt aus dem Rich-Text-Inhalt.
+    { id: "b8", type: "Prose", props: { body: '<p>Mehr <a href="/alt">hier</a></p>' } },
+    // Link ganz ohne editierbares Feld (kein data-ek-field im Block).
+    { id: "b9", type: "Naked", props: {} },
   ],
 };
 
@@ -407,6 +434,64 @@ describe("Bild-Feld", () => {
     expect(libraryMessages[0]?.fieldKey).toBe("image");
     expect(post.mock.calls[0]![1]).toBe(STUDIO);
 
+    post.mockRestore();
+  });
+});
+
+describe("Link-/Button-Klicks (nie navigieren, immer bearbeiten)", () => {
+  const linkPopover = (c: HTMLElement) => c.querySelector("[data-editkraft-link-popover]");
+  const inputByValue = (c: HTMLElement, value: string) =>
+    Array.from(c.querySelectorAll<HTMLInputElement>("[data-editkraft-link-popover] input")).find(
+      (i) => i.value === value,
+    );
+
+  it("Klick auf einen CTA-<a> (kind=link) öffnet das CTA-Popover, ohne zu navigieren", () => {
+    const { container } = render(<EditkraftPreview content={content} registry={registry} studioOrigin={STUDIO} />);
+    const anchor = container.querySelector('[data-editkraft-block-id="b6"] a') as HTMLElement;
+    const navigated = fireEvent.click(anchor); // false ⇒ preventDefault wurde aufgerufen
+    expect(navigated).toBe(false);
+    expect(linkPopover(container)).toBeTruthy();
+    // Popover ist mit Label + URL des Buttons vorbelegt.
+    expect(inputByValue(container, "Jetzt starten")).toBeTruthy();
+    expect(inputByValue(container, "/preise")).toBeTruthy();
+  });
+
+  it("Klick auf ein <span> IM <a> eines Wrapper-CTA (data-ek-field auf dem <div>) öffnet das CTA-Popover", () => {
+    const { container } = render(<EditkraftPreview content={content} registry={registry} studioOrigin={STUDIO} />);
+    // Verschachtelter Klick: Ziel ist das <span>, closest("a") muss greifen.
+    const span = container.querySelector('[data-editkraft-block-id="b7"] a span') as HTMLElement;
+    const navigated = fireEvent.click(span);
+    expect(navigated).toBe(false);
+    expect(linkPopover(container)).toBeTruthy();
+    expect(inputByValue(container, "Kontakt")).toBeTruthy();
+    expect(inputByValue(container, "/kontakt")).toBeTruthy();
+  });
+
+  it("Klick auf einen Inline-<a> in einem richText-Feld öffnet das Inline-Popover (mit Remove)", () => {
+    const { container } = render(<EditkraftPreview content={content} registry={registry} studioOrigin={STUDIO} />);
+    const anchor = container.querySelector('[data-editkraft-block-id="b8"] a') as HTMLElement;
+    const navigated = fireEvent.click(anchor);
+    expect(navigated).toBe(false);
+    const popover = linkPopover(container);
+    expect(popover).toBeTruthy();
+    // Nur das Inline-Popover hat einen "Remove"-Button (CTA nicht).
+    const buttons = Array.from(popover!.querySelectorAll("button")).map((b) => b.textContent);
+    expect(buttons).toContain("Remove");
+  });
+
+  it("Klick auf einen <a> OHNE editierbares Feld navigiert nicht und öffnet kein Popover", () => {
+    const post = vi.spyOn(window.parent, "postMessage");
+    const { container } = render(<EditkraftPreview content={content} registry={registry} studioOrigin={STUDIO} />);
+    post.mockClear();
+    const anchor = container.querySelector('[data-editkraft-block-id="b9"] a') as HTMLElement;
+    const navigated = fireEvent.click(anchor);
+    expect(navigated).toBe(false); // preventDefault greift trotzdem
+    expect(linkPopover(container)).toBeNull();
+    // Der getroffene Block wird stattdessen selektiert (wie der Block-/Bild-Pfad).
+    const select = post.mock.calls
+      .map((c) => c[0] as { type: string; blockId?: string })
+      .find((m) => m.type === "ek:select");
+    expect(select?.blockId).toBe("b9");
     post.mockRestore();
   });
 });

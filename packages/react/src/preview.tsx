@@ -530,27 +530,42 @@ export function EditkraftPreview({
     const target = e.target as HTMLElement | null;
     if (!target) return;
 
-    // (A) Klick auf einen Link → Bearbeiten-Popover statt Navigation.
+    // (A) Klick auf einen Link: im Editor wird NIE navigiert. Der <a> öffnet die
+    // Bearbeitung (Label + URL) bzw. selektiert nur den Block – Seitenwechsel läuft
+    // über den Page-Switcher des Studios, nicht über Canvas-Links. preventDefault/
+    // stopPropagation daher bedingungslos, sobald ein <a> getroffen ist (auch bei
+    // Klick auf ein Icon/<span> INNERHALB des <a> – closest("a") greift bereits).
     const anchor = target.closest?.("a") as HTMLAnchorElement | null;
     if (anchor) {
+      e.preventDefault();
+      e.stopPropagation();
       const fieldEl = anchor.closest?.<HTMLElement>("[data-ek-field]");
-      const wrapper = fieldEl?.closest<HTMLElement>("[data-editkraft-block-id]");
-      const blockId = wrapper?.getAttribute("data-editkraft-block-id") ?? null;
       const fieldKey = fieldEl?.getAttribute("data-ek-field") ?? null;
+      // Block über den <a> auflösen (nicht nur über fieldEl), damit die Block-
+      // Selektion auch für Links ganz ohne editierbares Feld greift.
+      const wrapper = anchor.closest<HTMLElement>("[data-editkraft-block-id]");
+      const blockId = wrapper?.getAttribute("data-editkraft-block-id") ?? null;
       const type = blockId ? blockTypeOf(blockId) : undefined;
       const kind = type && fieldKey ? fieldKindOf(type, fieldKey) : undefined;
-      if (blockId && fieldKey && kind === "link" && fieldEl === anchor) {
-        e.preventDefault();
-        e.stopPropagation();
-        openCtaPopover(blockId, fieldKey, anchor);
-        return;
-      }
+      // richText-Feld hat Vorrang: ein <a> darin ist ein Inline-Link (Label kommt
+      // aus dem Rich-Text-Inhalt), kein CTA → Inline-Popover.
       if (blockId && fieldKey && kind === "richText") {
-        e.preventDefault();
-        e.stopPropagation();
         openInlinePopover(blockId, fieldKey, anchor);
         return;
       }
+      // ekLink-Feld (CTA/Button): Label + URL bearbeiten – unabhängig davon, ob
+      // data-ek-field auf dem <a> selbst oder auf einem Wrapper darum sitzt.
+      if (blockId && fieldKey && kind === "link") {
+        openCtaPopover(blockId, fieldKey, anchor);
+        return;
+      }
+      // Kein editierbares Link-Ziel: den getroffenen Block nur selektieren (wie der
+      // Bild-/Block-Pfad unten); navigiert wird dank preventDefault trotzdem nie.
+      if (blockId) {
+        setSelectedId(blockId);
+        postToStudio(createMessage("ek:select", { blockId }), studioOrigin);
+      }
+      return;
     }
 
     // (B) Klick auf ein Bild-Feld (bestehend): Auswahl selbst setzen + Event stoppen.
