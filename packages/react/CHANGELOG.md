@@ -1,5 +1,16 @@
 # @editkraft/react
 
+## 0.9.1
+
+### Patch Changes
+
+- 5340192: Editor: Die Bearbeiten-Popovers (Link/Button, Bild, Select) und der Bild-Crop
+  schließen jetzt bei einem Klick daneben und bei Escape – vorher blieben sie bis
+  zum Cancel-Klick offen. Ein Klick INS Popover (Felder/Buttons) lässt es offen.
+  Außenklick übernimmt den eingegebenen Wert (wie das Verlassen einer
+  Tabellenzelle), Escape verwirft ihn; der modale Crop-Modus bricht bei Außenklick
+  ab, damit ein Streifklick keinen Rahmen festschreibt.
+
 ## 0.9.0
 
 ### Minor Changes
