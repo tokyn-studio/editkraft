@@ -438,6 +438,85 @@ describe("Bild-Feld", () => {
   });
 });
 
+describe("Medienfeld (Bild ⇄ Video)", () => {
+  const popoverButtons = (c: HTMLElement) =>
+    Array.from(c.querySelectorAll<HTMLButtonElement>("[data-editkraft-image-popover] button"));
+  const buttonByText = (c: HTMLElement, text: string) =>
+    popoverButtons(c).find((b) => b.textContent?.trim() === text);
+  const popoverInputs = (c: HTMLElement) =>
+    Array.from(c.querySelectorAll<HTMLInputElement>("[data-editkraft-image-popover] input"));
+
+  it("Bild-Popover zeigt den Bild|Video-Umschalter", () => {
+    const { container } = render(<EditkraftPreview content={content} registry={registry} studioOrigin={STUDIO} />);
+    fireEvent.click(fieldEl(container, "b4", "image"));
+    expect(container.querySelector("[data-editkraft-image-popover]")).toBeTruthy();
+    expect(buttonByText(container, "Image")).toBeTruthy();
+    expect(buttonByText(container, "Video")).toBeTruthy();
+  });
+
+  it("Wechsel auf Video sendet ek:update mit kind:video (nicht destruktiv)", () => {
+    const post = vi.spyOn(window.parent, "postMessage");
+    const { container } = render(<EditkraftPreview content={content} registry={registry} studioOrigin={STUDIO} />);
+    fireEvent.click(fieldEl(container, "b4", "image"));
+    post.mockClear();
+
+    fireEvent.click(buttonByText(container, "Video")!);
+
+    const upd = post.mock.calls
+      .map((c) => c[0] as { type: string; blockId?: string; props?: Record<string, { kind?: string }> })
+      .find((x) => x.type === "ek:update");
+    expect(upd?.blockId).toBe("b4");
+    expect(upd?.props?.image?.kind).toBe("video");
+    post.mockRestore();
+  });
+
+  it("Video-Tab: URL anwenden sendet ek:update mit url UND kind:video", () => {
+    const post = vi.spyOn(window.parent, "postMessage");
+    const { container } = render(<EditkraftPreview content={content} registry={registry} studioOrigin={STUDIO} />);
+    fireEvent.click(fieldEl(container, "b4", "image"));
+    fireEvent.click(buttonByText(container, "Video")!);
+
+    const urlInput = popoverInputs(container).find((i) => i.getAttribute("placeholder")?.includes("video URL"));
+    expect(urlInput).toBeTruthy();
+    fireEvent.change(urlInput!, { target: { value: "https://cdn.test/clip.mp4" } });
+    post.mockClear();
+
+    fireEvent.click(buttonByText(container, "Apply URL")!);
+
+    const upd = post.mock.calls
+      .map((c) => c[0] as { type: string; props?: Record<string, { url?: string; kind?: string }> })
+      .find((x) => x.type === "ek:update");
+    expect(upd?.props?.image?.url).toBe("https://cdn.test/clip.mp4");
+    expect(upd?.props?.image?.kind).toBe("video");
+    post.mockRestore();
+  });
+
+  it("Video-Upload > 25 MB wird clientseitig abgelehnt (Meldung, kein ek:asset-upload)", () => {
+    const post = vi.spyOn(window.parent, "postMessage");
+    const { container } = render(<EditkraftPreview content={content} registry={registry} studioOrigin={STUDIO} />);
+    fireEvent.click(fieldEl(container, "b4", "image"));
+    fireEvent.click(buttonByText(container, "Video")!);
+    post.mockClear();
+
+    const fileInput = container.querySelector<HTMLInputElement>(
+      "[data-editkraft-image-popover] input[type=file]",
+    );
+    expect(fileInput).toBeTruthy();
+    const bigFile = new File(["x"], "huge.mp4", { type: "video/mp4" });
+    Object.defineProperty(bigFile, "size", { value: 26 * 1024 * 1024 });
+    fireEvent.change(fileInput!, { target: { files: [bigFile] } });
+
+    // Kein Upload rausgegangen …
+    const uploads = post.mock.calls
+      .map((c) => c[0] as { type?: string })
+      .filter((m) => m?.type === "ek:asset-upload");
+    expect(uploads.length).toBe(0);
+    // … und die Größen-Meldung ist sichtbar.
+    expect(container.querySelector("[data-editkraft-image-popover]")?.textContent).toContain("25 MB");
+    post.mockRestore();
+  });
+});
+
 describe("Link-/Button-Klicks (nie navigieren, immer bearbeiten)", () => {
   const linkPopover = (c: HTMLElement) => c.querySelector("[data-editkraft-link-popover]");
   const inputByValue = (c: HTMLElement, value: string) =>

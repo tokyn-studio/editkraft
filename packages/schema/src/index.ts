@@ -23,6 +23,7 @@ export {
   type EkFieldMeta,
   type EkSelectOption,
   type EkImageValue,
+  type EkMediaValue,
   type EkImageFrame,
   type EkLinkValue,
   type EkReferenceValue,

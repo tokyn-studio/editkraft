@@ -9,6 +9,7 @@ export {
   type RegistryInput,
 } from "./registry";
 export { renderBlocks, type RenderOptions } from "./render";
+export { EkMedia, type EkMediaProps } from "./media";
 export { EditkraftPage, type EditkraftPageProps } from "./page";
 export {
   loadPublishedPage,

@@ -186,7 +186,8 @@ export function EditkraftPreview({
     current: string;
   } | null>(null);
 
-  // Bild-Bearbeiten-Popover (Austausch per URL / Datei / Drag&Drop, Alt-Text).
+  // Medien-Bearbeiten-Popover (Austausch per URL / Datei / Drag&Drop, Alt-Text;
+  // Umschalter Bild ⇄ Video, Poster + Steuerelemente für Videos).
   const [imagePopover, setImagePopover] = useState<{
     blockId: string;
     fieldKey: string;
@@ -194,7 +195,11 @@ export function EditkraftPreview({
     left: number;
     url: string;
     alt: string;
+    kind: "image" | "video";
+    poster: string;
+    controls: boolean;
     status: "idle" | "uploading" | "error";
+    errorMsg?: string | undefined;
   } | null>(null);
 
   // Zuschneiden-Modus (non-destruktives 1:1-Framing: Pan per Ziehen, Zoom per Slider/Scroll).
@@ -894,7 +899,9 @@ export function EditkraftPreview({
 
   // --- Bild-Popover (URL / Datei-Upload / Drag&Drop) ------------------------
   const openImagePopover = (blockId: string, fieldKey: string, imgEl: HTMLElement) => {
-    const val = findBlockById(blockId)?.props?.[fieldKey] as { url?: string; alt?: string } | undefined;
+    const val = findBlockById(blockId)?.props?.[fieldKey] as
+      | { url?: string; alt?: string; kind?: "image" | "video"; poster?: string; controls?: boolean }
+      | undefined;
     const rect = imgEl.getBoundingClientRect();
     const vh = typeof window !== "undefined" ? window.innerHeight : 800;
     setImagePopover({
@@ -904,6 +911,9 @@ export function EditkraftPreview({
       left: Math.max(6, rect.left + 8),
       url: val?.url ?? "",
       alt: val?.alt ?? "",
+      kind: val?.kind === "video" ? "video" : "image",
+      poster: val?.poster ?? "",
+      controls: val?.controls === true,
       status: "idle",
     });
   };
@@ -980,6 +990,66 @@ export function EditkraftPreview({
     closeImagePopover();
   };
 
+  // --- Medium (Bild ⇄ Video) ------------------------------------------------
+  // Videos bis 25 MB (mp4/webm); clientseitig geprüft, damit große Dateien gar
+  // nicht erst als Base64 ans Studio wandern.
+  const MAX_VIDEO_BYTES = 25 * 1024 * 1024;
+
+  // Medium umschalten. Der Registry-Feldtyp bleibt "image" – nur der WERT trägt
+  // `kind`. Nicht destruktiv: bei Video→Bild bleiben poster/controls im Wert
+  // liegen (der Renderer/EkMedia ignoriert sie bei kind:"image"), sodass ein
+  // versehentlicher Wechsel die Video-Konfiguration nicht löscht.
+  const setMediaKind = (kind: "image" | "video") => {
+    const ip = imagePopover;
+    if (!ip || ip.kind === kind) return;
+    setImagePopover({ ...ip, kind, status: "idle", errorMsg: undefined });
+    mergeImageValue(ip.blockId, ip.fieldKey, { kind });
+  };
+
+  const applyVideoUrl = () => {
+    const ip = imagePopover;
+    if (!ip) return;
+    const url = ip.url.trim();
+    if (url) mergeImageValue(ip.blockId, ip.fieldKey, { url, assetId: "", kind: "video" });
+    closeImagePopover();
+  };
+
+  const handleVideoFile = (file: File) => {
+    const ip = imagePopover;
+    if (!ip || !file) return;
+    if (file.size > MAX_VIDEO_BYTES) {
+      // Zu groß: sprechende Meldung, KEIN postMessage.
+      setImagePopover({ ...ip, status: "error", errorMsg: "Video is too large (max. 25 MB)." });
+      return;
+    }
+    setImagePopover({ ...ip, status: "uploading", errorMsg: undefined });
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = String(reader.result || "");
+      const base64 = dataUrl.includes(",") ? dataUrl.slice(dataUrl.indexOf(",") + 1) : "";
+      // Gleicher ek:asset-upload-Weg wie bei Bildern; die mimeType video/… sagt
+      // dem Studio-Backend, dass ein Video hochzuladen ist. Der Wert trägt bereits
+      // kind:"video" (durch den Tab-Wechsel), das Studio antwortet mit ek:update.
+      if (typeof window !== "undefined") {
+        window.parent.postMessage(
+          {
+            channel: "editkraft",
+            v: 1,
+            type: "ek:asset-upload",
+            blockId: ip.blockId,
+            fieldKey: ip.fieldKey,
+            fileName: file.name,
+            mimeType: file.type || "video/mp4",
+            dataBase64: base64,
+          },
+          studioOrigin,
+        );
+      }
+      closeImagePopover();
+    };
+    reader.readAsDataURL(file);
+  };
+
   // --- Zuschneiden (1:1-Framing) --------------------------------------------
   const clampPct = (n: number) => Math.max(0, Math.min(100, n));
 
@@ -1045,6 +1115,7 @@ export function EditkraftPreview({
     const cur = (findBlockById(ip.blockId)?.props?.[ip.fieldKey] ?? {}) as {
       url?: string;
       alt?: string;
+      poster?: string;
     };
     const patch: Record<string, unknown> = {};
     const url = ip.url.trim();
@@ -1053,6 +1124,8 @@ export function EditkraftPreview({
       patch.assetId = "";
     }
     if ((cur.alt ?? "") !== ip.alt) patch.alt = ip.alt;
+    // Poster-URL nur im Video-Tab (der pointerdown-Handler läuft vor dem Blur).
+    if (ip.kind === "video" && (cur.poster ?? "") !== ip.poster) patch.poster = ip.poster;
     if (Object.keys(patch).length) mergeImageValue(ip.blockId, ip.fieldKey, patch);
     closeImagePopover();
   };
@@ -1505,46 +1578,47 @@ export function EditkraftPreview({
   const renderImagePopover = (): ReactNode => {
     const ip = imagePopover;
     if (!ip) return null;
-    return createElement(
-      "div",
-      {
-        "data-editkraft-image-popover": "true",
-        onDragOver: (e: { preventDefault: () => void }) => e.preventDefault(),
-        onDrop: (e: { preventDefault: () => void; dataTransfer: { files: FileList } | null }) => {
-          e.preventDefault();
-          const f = e.dataTransfer?.files?.[0];
-          if (f) handleImageFile(f as File);
-        },
-        style: {
-          position: "fixed",
-          top: ip.top,
-          left: ip.left,
-          zIndex: 2147483647,
-          width: 300,
-          display: "flex",
-          flexDirection: "column" as const,
-          gap: 10,
-          padding: 12,
-          background: "#1A1C1F",
-          border: "1px solid #2E3138",
-          borderRadius: 12,
-          boxShadow: "0 12px 34px -8px rgba(0,0,0,0.6)",
-          fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif",
-        },
-      },
-      // Aktionen: Zuschneiden (nur mit vorhandenem Bild) + Library + KI-Editor (immer).
+    const isVideo = ip.kind === "video";
+    const inputStyle = {
+      boxSizing: "border-box" as const,
+      width: "100%",
+      background: "#0C0D0F",
+      border: "1px solid #2E3138",
+      borderRadius: 7,
+      color: "#EDEEF0",
+      padding: "7px 9px",
+      fontSize: 13,
+      outline: "none",
+    };
+
+    // Umschalter Bild | Video – Stil wie die url/mail/tel-Tabs des Link-Popovers.
+    const mediaTab = (k: "image" | "video", lbl: string): ReactNode =>
       createElement(
-        "div",
-        { style: { display: "flex", gap: 6 } },
-        (findBlockById(ip.blockId)?.props?.[ip.fieldKey] as { url?: string } | undefined)?.url
-          ? imgActionButton(cropIcon, "Crop", () => openCrop(ip.blockId, ip.fieldKey))
-          : null,
-        imgActionButton(libraryIcon, "Library", () => openLibrary(ip.blockId, ip.fieldKey)),
-        imgActionButton(sparkleIcon, "AI Editor", () => openAiEditor(ip.blockId, ip.fieldKey), true),
-      ),
+        "button",
+        {
+          type: "button",
+          key: k,
+          onMouseDown: (e: { preventDefault: () => void }) => e.preventDefault(),
+          onClick: () => setMediaKind(k),
+          style: {
+            flex: 1,
+            padding: "5px 0",
+            fontSize: 12,
+            borderRadius: 6,
+            cursor: "pointer",
+            border: `1px solid ${ip.kind === k ? "transparent" : "#2E3138"}`,
+            background: ip.kind === k ? "#F5A623" : "transparent",
+            color: ip.kind === k ? "#1A1400" : "#A5A8B0",
+          },
+        },
+        lbl,
+      );
+
+    const uploadLabel = (): ReactNode =>
       createElement(
         "label",
         {
+          key: "upload",
           style: {
             display: "flex",
             flexDirection: "column" as const,
@@ -1565,64 +1639,125 @@ export function EditkraftPreview({
         ip.status === "uploading"
           ? "Uploading …"
           : ip.status === "error"
-            ? "Upload failed – try again"
-            : "Drag an image here or click to upload",
+            ? ip.errorMsg ?? "Upload failed – try again"
+            : isVideo
+              ? "Drag a video here or click to upload (mp4/webm, max. 25 MB)"
+              : "Drag an image here or click to upload",
         createElement("input", {
           type: "file",
-          accept: "image/*",
+          accept: isVideo ? "video/mp4,video/webm" : "image/*",
           onChange: (e: { target: { files: FileList | null } }) => {
             const f = e.target.files?.[0];
-            if (f) handleImageFile(f as File);
+            if (f) (isVideo ? handleVideoFile : handleImageFile)(f as File);
           },
           style: { display: "none" },
         }),
-      ),
-      createElement("input", {
-        value: ip.url,
-        placeholder: "…or image URL (https://…)",
-        onChange: (e: { target: { value: string } }) => setImagePopover({ ...ip, url: e.target.value }),
-        style: {
-          boxSizing: "border-box" as const,
-          width: "100%",
-          background: "#0C0D0F",
-          border: "1px solid #2E3138",
-          borderRadius: 7,
-          color: "#EDEEF0",
-          padding: "7px 9px",
-          fontSize: 13,
-          outline: "none",
-        },
-      }),
-      // Alt-Text (SEO/Screenreader) – wird beim Verlassen des Felds übernommen.
-      createElement("input", {
-        value: ip.alt,
-        placeholder: "Alt text (image description for SEO)",
-        onChange: (e: { target: { value: string } }) => setImagePopover({ ...ip, alt: e.target.value }),
-        onBlur: () => {
-          const cur = findBlockById(ip.blockId)?.props?.[ip.fieldKey] as { alt?: string } | undefined;
-          if ((cur?.alt ?? "") !== ip.alt) mergeImageValue(ip.blockId, ip.fieldKey, { alt: ip.alt });
-        },
-        style: {
-          boxSizing: "border-box" as const,
-          width: "100%",
-          background: "#0C0D0F",
-          border: "1px solid #2E3138",
-          borderRadius: 7,
-          color: "#EDEEF0",
-          padding: "7px 9px",
-          fontSize: 13,
-          outline: "none",
-        },
-      }),
+      );
+
+    // Aktions-Buttons oben: Bild bekommt Crop (nur mit URL) + Library + KI;
+    // Video nur Library (kein Crop, kein KI – die Library liefert auch Videos).
+    const hasUrl = !!(findBlockById(ip.blockId)?.props?.[ip.fieldKey] as { url?: string } | undefined)?.url;
+    const actionRow: ReactNode = isVideo
+      ? createElement(
+          "div",
+          { key: "actions", style: { display: "flex", gap: 6 } },
+          imgActionButton(libraryIcon, "Library", () => openLibrary(ip.blockId, ip.fieldKey)),
+        )
+      : createElement(
+          "div",
+          { key: "actions", style: { display: "flex", gap: 6 } },
+          hasUrl ? imgActionButton(cropIcon, "Crop", () => openCrop(ip.blockId, ip.fieldKey)) : null,
+          imgActionButton(libraryIcon, "Library", () => openLibrary(ip.blockId, ip.fieldKey)),
+          imgActionButton(sparkleIcon, "AI Editor", () => openAiEditor(ip.blockId, ip.fieldKey), true),
+        );
+
+    const children: ReactNode[] = [
       createElement(
         "div",
-        { style: { display: "flex", gap: 6 } },
+        { key: "tabs", style: { display: "flex", gap: 4 } },
+        mediaTab("image", "Image"),
+        mediaTab("video", "Video"),
+      ),
+      actionRow,
+      uploadLabel(),
+      createElement("input", {
+        key: "url",
+        value: ip.url,
+        placeholder: isVideo ? "…or video URL (https://…)" : "…or image URL (https://…)",
+        onChange: (e: { target: { value: string } }) => setImagePopover({ ...ip, url: e.target.value }),
+        style: inputStyle,
+      }),
+    ];
+
+    if (isVideo) {
+      // Poster-URL (Vorschaubild) – wird beim Verlassen des Felds übernommen.
+      children.push(
+        createElement("input", {
+          key: "poster",
+          value: ip.poster,
+          placeholder: "Poster image URL (optional)",
+          onChange: (e: { target: { value: string } }) => setImagePopover({ ...ip, poster: e.target.value }),
+          onBlur: () => {
+            const cur = findBlockById(ip.blockId)?.props?.[ip.fieldKey] as { poster?: string } | undefined;
+            if ((cur?.poster ?? "") !== ip.poster) mergeImageValue(ip.blockId, ip.fieldKey, { poster: ip.poster });
+          },
+          style: inputStyle,
+        }),
+      );
+      // Checkbox „Show controls" – ohne = stummes Hintergrund-Video (autoplay/loop).
+      children.push(
+        createElement(
+          "label",
+          {
+            key: "controls",
+            style: {
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              fontSize: 13,
+              color: "#A5A8B0",
+              cursor: "pointer",
+            },
+          },
+          createElement("input", {
+            type: "checkbox",
+            checked: ip.controls,
+            onChange: (e: { target: { checked: boolean } }) => {
+              const next = e.target.checked;
+              setImagePopover({ ...ip, controls: next });
+              mergeImageValue(ip.blockId, ip.fieldKey, { controls: next });
+            },
+          }),
+          "Show controls",
+        ),
+      );
+    } else {
+      // Alt-Text (SEO/Screenreader) – wird beim Verlassen des Felds übernommen.
+      children.push(
+        createElement("input", {
+          key: "alt",
+          value: ip.alt,
+          placeholder: "Alt text (image description for SEO)",
+          onChange: (e: { target: { value: string } }) => setImagePopover({ ...ip, alt: e.target.value }),
+          onBlur: () => {
+            const cur = findBlockById(ip.blockId)?.props?.[ip.fieldKey] as { alt?: string } | undefined;
+            if ((cur?.alt ?? "") !== ip.alt) mergeImageValue(ip.blockId, ip.fieldKey, { alt: ip.alt });
+          },
+          style: inputStyle,
+        }),
+      );
+    }
+
+    children.push(
+      createElement(
+        "div",
+        { key: "apply", style: { display: "flex", gap: 6 } },
         createElement(
           "button",
           {
             type: "button",
             onMouseDown: (e: { preventDefault: () => void }) => e.preventDefault(),
-            onClick: applyImageUrl,
+            onClick: isVideo ? applyVideoUrl : applyImageUrl,
             style: {
               flex: 1,
               padding: "7px 0",
@@ -1656,6 +1791,36 @@ export function EditkraftPreview({
           "Cancel",
         ),
       ),
+    );
+
+    return createElement(
+      "div",
+      {
+        "data-editkraft-image-popover": "true",
+        onDragOver: (e: { preventDefault: () => void }) => e.preventDefault(),
+        onDrop: (e: { preventDefault: () => void; dataTransfer: { files: FileList } | null }) => {
+          e.preventDefault();
+          const f = e.dataTransfer?.files?.[0];
+          if (f) (isVideo ? handleVideoFile : handleImageFile)(f as File);
+        },
+        style: {
+          position: "fixed",
+          top: ip.top,
+          left: ip.left,
+          zIndex: 2147483647,
+          width: 300,
+          display: "flex",
+          flexDirection: "column" as const,
+          gap: 10,
+          padding: 12,
+          background: "#1A1C1F",
+          border: "1px solid #2E3138",
+          borderRadius: 12,
+          boxShadow: "0 12px 34px -8px rgba(0,0,0,0.6)",
+          fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif",
+        },
+      },
+      ...children,
     );
   };
 
