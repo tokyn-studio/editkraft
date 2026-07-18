@@ -42,11 +42,13 @@ without the preview route — the editor then shows the site's 404 page.
    app's layout segments — wrap `<EditkraftPreview>` in
    `app/editkraft/preview/preview-client.tsx` with whatever providers the
    blocks need (next-intl, theme, …), or editing fails silently.
-6. **Preview should show the site chrome.** Header/footer usually live in a
-   route-group layout (`(site)/layout.tsx`) that the preview route does not
-   inherit. Render them in the preview page around the content, wrapped in a
-   `pointer-events-none` container — visible for editing context, but link
-   clicks must not navigate the iframe away.
+6. **The preview MUST show the site chrome (header + footer).** They usually
+   live in a route-group layout (`(site)/layout.tsx`) that the preview route
+   does not inherit — so render them in the preview page around the content,
+   wrapped in a `pointer-events-none` container: visible for editing context,
+   but link clicks must not navigate the iframe away. **A migration is not
+   done while the editor canvas shows naked content blocks without header and
+   footer.**
 
 ## The process
 
@@ -74,7 +76,10 @@ without the preview route — the editor then shows the site's 404 page.
    `remotePatterns`. Site-wide statics (logo, favicons, OG images) stay in
    `public/`.
 6. **Verify before cutover.** Render the preview route with a signed token
-   (`createDraftToken`) and compare against the live page. Publish (set
+   (`createDraftToken`) and compare against the live page. The comparison
+   includes the chrome: **the preview must show the page inside the real
+   header and footer** (contract rule 6) — if the canvas shows naked blocks,
+   wire the chrome into `app/editkraft/preview/` first. Publish (set
    `published_version_id` + `status`) only when it matches.
 7. **Cut over one page at a time.** Replace the static route with the
    Editkraft render route (root pages and routes with special metadata keep
@@ -94,6 +99,10 @@ without the preview route — the editor then shows the site's 404 page.
 - `sanitizeRichText` allows `strong/em/u/s/a[href]/p/h2/h3` — content using
   `<br>`, `<code>` or `a[target]` needs a block-local sanitizer for now.
 - After changing `NEXT_PUBLIC_*` values: rebuild/restart — they are inlined.
+- **Forgotten site chrome:** if the preview route renders only the blocks,
+  editors see the page without header/footer and lose all context. Wrap the
+  real header and footer around the preview content (`pointer-events-none`) —
+  this is contract rule 6 and part of the cutover verification, not optional.
 - The Studio publishes the **whole translation group** on Publish and
   implicitly saves the current preview state; seeds should therefore keep
   every locale's draft in a publishable state.
