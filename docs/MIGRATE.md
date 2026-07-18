@@ -112,6 +112,38 @@ Also keep in code (for now) and report as "stays code":
 - **Legal-style rich content** needing headings/lists beyond the sanitizer
   allowlist — either a block-local sanitizer or keep the existing format.
 
+## Images that can become videos
+
+Any `ekImage` field can carry a **video** instead of a picture (schema ≥ 0.9 /
+react ≥ 0.10). The field type stays `image` — only the stored *value* gains an
+optional `kind: "video"` — so every existing `data-ek-field` contract keeps
+working and old image values (without `kind`) stay images.
+
+To let editors switch a picture to a video (and back), render the field with
+`<EkMedia>` instead of a hand-written `<img>`:
+
+```tsx
+import { EkMedia } from "@editkraft/react";
+
+function Banner({ image }: { image: EkMediaValue }) {
+  return (
+    <div data-ek-field="image">
+      <EkMedia value={image} className="banner-media" />
+    </div>
+  );
+}
+```
+
+`EkMedia` renders an `<img>` for pictures and a muted, looping, autoplaying
+`<video playsinline>` for videos (a silent background video; it shows controls
+only when the editor ticked "Show controls"). Framing (`imageFrameStyles`) is
+applied identically for both. In the Studio the image popover now has an
+**Image | Video** switch: editors upload mp4/webm (up to 25 MB) or paste a URL,
+optionally set a poster image, and toggle controls.
+
+Existing `<img>` blocks keep working unchanged for images — migrate them to
+`<EkMedia>` only where you want the video option.
+
 ## Site globals (contact data, claim, footer lines)
 
 Values from a settings module (`settings.ts`) that appear in blocks AND in the
