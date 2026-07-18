@@ -1,5 +1,12 @@
 # editkraft
 
+## 0.5.2
+
+### Patch Changes
+
+- Updated dependencies [3d94b91]
+  - @editkraft/schema@0.9.0
+
 ## 0.5.1
 
 ### Patch Changes

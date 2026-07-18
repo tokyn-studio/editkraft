@@ -1,5 +1,15 @@
 # @editkraft/schema
 
+## 0.9.0
+
+### Minor Changes
+
+- 3d94b91: Medienfeld: Der Wert eines `ekImage`-Feldes kann jetzt ein Video statt eines
+  Bildes tragen. Neue optionale Wert-Felder `kind` ("image"|"video"), `poster`
+  (Vorschaubild-URL) und `controls` (Video-Steuerelemente). Abwärtskompatibel:
+  bestehende Bild-Werte ohne `kind` bleiben Bilder, der Registry-Feldtyp bleibt
+  `image`. Neuer exportierter Typ `EkMediaValue` für den Renderer.
+
 ## 0.8.0
 
 ### Minor Changes
