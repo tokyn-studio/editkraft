@@ -78,6 +78,16 @@ export type EkImageFrame = z.infer<typeof ekImageFrame>;
 
 export const DEFAULT_IMAGE_FRAME: EkImageFrame = { x: 50, y: 50, zoom: 1 };
 
+/**
+ * Wert eines ekImage-FELDES — seit dem Medienfeld ein Bild ODER ein Video.
+ * Der Registry-Feldtyp bleibt "image" (alle bestehenden data-ek-field-Verträge
+ * gelten weiter); nur der WERT trägt das Medium über die drei optionalen Felder:
+ * - `kind`: "video" macht den Wert zum Video; fehlend/"image" = Bild (abwärtskompatibel).
+ * - `poster`: Vorschaubild-URL (nur bei Videos sinnvoll).
+ * - `controls`: zeigt Video-Steuerelemente; ohne (Default) läuft das Video als
+ *   stummes Hintergrund-Video (muted/loop/autoplay).
+ * Alle drei sind optional, sodass bestehende Bild-Werte (ohne `kind`) weiter validieren.
+ */
 export const ekImageValue = z.object({
   assetId: z.string(),
   alt: z.string().optional(),
@@ -85,8 +95,18 @@ export const ekImageValue = z.object({
   width: z.number().int().positive().optional(),
   height: z.number().int().positive().optional(),
   frame: ekImageFrame.optional(),
+  kind: z.enum(["image", "video"]).optional(),
+  poster: z.string().optional(),
+  controls: z.boolean().optional(),
 });
 export type EkImageValue = z.infer<typeof ekImageValue>;
+
+/**
+ * Erweiterter Wert-Typ für den Renderer (EkMedia): identisch zu EkImageValue,
+ * aber unter dem sprechenden Namen des Mediums. Bestehende Bild-Werte ohne
+ * `kind` gelten als Bild.
+ */
+export type EkMediaValue = EkImageValue;
 
 /**
  * Styles for non-destructive 1:1 framing — identical in the live preview

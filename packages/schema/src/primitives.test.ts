@@ -72,6 +72,26 @@ describe("Feld-Primitives: Validierung", () => {
     expect(ekImageValue.safeParse({ assetId: "a1" }).success).toBe(true);
   });
 
+  it("ekImage-Wert trägt optionale Medien-Felder (kind/poster/controls) abwärtskompatibel", () => {
+    // Bestehender Bild-Wert ohne kind → weiterhin gültig (Bild).
+    expect(ekImage().safeParse({ assetId: "", url: "https://x/foto.jpg" }).success).toBe(true);
+    // Explizit als Bild.
+    expect(ekImage().safeParse({ assetId: "a1", kind: "image" }).success).toBe(true);
+    // Video mit Poster und Steuerelementen.
+    expect(
+      ekImage().safeParse({
+        assetId: "a1",
+        url: "https://x/clip.mp4",
+        kind: "video",
+        poster: "https://x/poster.jpg",
+        controls: true,
+      }).success,
+    ).toBe(true);
+    // Ungültiges kind wird abgelehnt.
+    expect(ekImage().safeParse({ assetId: "a1", kind: "gif" }).success).toBe(false);
+    expect(ekImageValue.safeParse({ assetId: "a1", controls: "ja" }).success).toBe(false);
+  });
+
   it("ekLink verlangt href", () => {
     expect(ekLink().safeParse({ href: "/ueber-uns" }).success).toBe(true);
     expect(ekLink().safeParse({ label: "ohne href" }).success).toBe(false);
