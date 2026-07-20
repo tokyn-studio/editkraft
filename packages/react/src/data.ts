@@ -114,6 +114,29 @@ export async function loadPublishedPage(
   slug: string,
   options: LoadOptions = {},
 ): Promise<PublishedPage | null> {
+  // ISR-Cache an den Seiten-Tag binden: nur so invalidiert der Revalidate-
+  // Handler (`revalidateTag(pageTag(slug))`) die veröffentlichte Seite beim
+  // Publish. Ohne diese Bindung bleibt der statische/ISR-Stand eingefroren, bis
+  // die Kundenseite neu deployt wird. next/cache lazy wie in revalidate.ts.
+  const { unstable_cache } = await import("next/cache");
+  return unstable_cache(
+    () => loadPublishedPageUncached(supabase, slug, options),
+    [
+      "editkraft:page",
+      slug,
+      options.locale ?? "",
+      options.defaultLocale ?? "",
+      options.supportedSchemaRange ?? "",
+    ],
+    { tags: [pageTag(slug)] },
+  )();
+}
+
+async function loadPublishedPageUncached(
+  supabase: SupabaseClient,
+  slug: string,
+  options: LoadOptions = {},
+): Promise<PublishedPage | null> {
   let { data: page, error } = await selectPageBySlug(supabase, slug, options.locale);
 
   if (error) {
@@ -442,6 +465,20 @@ async function selectGlobalsRow(
  *   const globals = (await loadGlobals(supabase, globalsDefinition)) ?? settings;
  */
 export async function loadGlobals<D extends GlobalsDefinition>(
+  supabase: SupabaseClient,
+  definition: D,
+): Promise<GlobalsValues<D> | null> {
+  // An den Globals-Tag binden, damit `revalidateTag(globalsTag())` beim
+  // Globals-Publish greift (sonst blieben Globals bis zum Deploy eingefroren).
+  const { unstable_cache } = await import("next/cache");
+  return unstable_cache(
+    () => loadGlobalsUncached(supabase, definition),
+    ["editkraft:globals"],
+    { tags: [globalsTag()] },
+  )() as Promise<GlobalsValues<D> | null>;
+}
+
+async function loadGlobalsUncached<D extends GlobalsDefinition>(
   supabase: SupabaseClient,
   definition: D,
 ): Promise<GlobalsValues<D> | null> {

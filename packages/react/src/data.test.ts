@@ -16,6 +16,29 @@ import {
 } from "./data";
 import { EditkraftSchemaError, EditkraftError } from "./errors";
 
+/**
+ * next/cache im Test als Pass-Through: ruft die gecachte Funktion direkt auf
+ * (kein echtes Caching, alle bestehenden Reads verhalten sich unverändert),
+ * zeichnet aber keyParts/tags auf — damit prüfbar ist, dass die Reads an den
+ * richtigen ISR-Tag gebunden werden.
+ */
+const { cacheCalls } = vi.hoisted(() => ({
+  cacheCalls: [] as { keyParts: unknown[]; tags: string[] | undefined }[],
+}));
+vi.mock("next/cache", () => ({
+  unstable_cache:
+    (
+      fn: (...a: unknown[]) => unknown,
+      keyParts: unknown[],
+      options?: { tags?: string[] },
+    ) =>
+    (...args: unknown[]) => {
+      cacheCalls.push({ keyParts, tags: options?.tags });
+      return fn(...args);
+    },
+  revalidateTag: () => {},
+}));
+
 /** One recorded `.eq(field, value)` call, tagged with the table it ran against. */
 interface QueryLogEntry {
   table: string;
@@ -175,6 +198,16 @@ describe("loadPublishedPage", () => {
   it("gibt null zurück, wenn keine published Seite existiert", async () => {
     const supabase = fakeSupabase({ page: { data: null } });
     expect(await loadPublishedPage(supabase, "fehlt")).toBeNull();
+  });
+
+  it("bindet den Read an pageTag(slug) (ISR-Revalidierung)", async () => {
+    cacheCalls.length = 0;
+    const supabase = fakeSupabase({ page: { data: null } });
+    await loadPublishedPage(supabase, "home", { locale: "de" });
+    const call = cacheCalls.find(
+      (c) => Array.isArray(c.keyParts) && c.keyParts[0] === "editkraft:page",
+    );
+    expect(call?.tags).toEqual([pageTag("home")]);
   });
 
   it("wirft EditkraftSchemaError bei inkompatibler schemaVersion (anderer Major)", async () => {
@@ -827,6 +860,16 @@ describe("Site-Globals-Loader", () => {
     const values = await loadGlobals(supabase, definition);
     expect(values).toEqual({ phone: "0176 1" });
     expect(selects).toEqual(["published"]);
+  });
+
+  it("bindet loadGlobals an globalsTag() (ISR-Revalidierung)", async () => {
+    cacheCalls.length = 0;
+    const supabase = fakeGlobalsSupabase({ data: { published: { phone: "1" } } });
+    await loadGlobals(supabase, definition);
+    const call = cacheCalls.find(
+      (c) => Array.isArray(c.keyParts) && c.keyParts[0] === "editkraft:globals",
+    );
+    expect(call?.tags).toEqual([globalsTag()]);
   });
 
   it("loadGlobals → null bei fehlender Tabelle (Site ohne Globals-Migration), ohne zu werfen", async () => {
