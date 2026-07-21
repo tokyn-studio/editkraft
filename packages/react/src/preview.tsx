@@ -202,6 +202,11 @@ export function EditkraftPreview({
     errorMsg?: string | undefined;
   } | null>(null);
 
+  // Aktiv, während aus der Studio-Medienbibliothek ein Bild über den Canvas
+  // gezogen wird (per ek:media-drag-start/-end signalisiert). Steuert das
+  // Hervorheben der Bild-Felder als Drop-Ziele.
+  const [mediaDragActive, setMediaDragActive] = useState(false);
+
   // Zuschneiden-Modus (non-destruktives 1:1-Framing: Pan per Ziehen, Zoom per Slider/Scroll).
   const [cropMode, setCropMode] = useState<{
     blockId: string;
@@ -273,6 +278,18 @@ export function EditkraftPreview({
 
     const onMessage = (event: MessageEvent) => {
       if (!isAllowedOrigin(event.origin, studioOrigin)) return;
+      // Roh-Nachrichten (kein Schema-Typ): Drag&Drop eines Bildes aus der
+      // Studio-Medienbibliothek über den Canvas. Nur ein Flag – der eigentliche
+      // Austausch läuft beim Drop über ek:media-drop zurück ans Studio.
+      const raw = event.data as { channel?: string; type?: string } | null;
+      if (raw && raw.channel === "editkraft" && raw.type === "ek:media-drag-start") {
+        setMediaDragActive(true);
+        return;
+      }
+      if (raw && raw.channel === "editkraft" && raw.type === "ek:media-drag-end") {
+        setMediaDragActive(false);
+        return;
+      }
       const message = parseMessage(event.data);
       if (!message) return;
       if (message.type === "ek:tree") {
@@ -347,6 +364,80 @@ export function EditkraftPreview({
       }
     }
   });
+
+  // Drag&Drop aus der Studio-Medienbibliothek: solange ein Bild über den Canvas
+  // gezogen wird, Bild-Felder als Drop-Ziele hervorheben und beim Ablegen
+  // ek:media-drop (blockId/fieldKey) ans Studio melden. Der eigentliche Austausch
+  // passiert dort (applyImageAsset → ek:update) mit dem gezogenen Asset.
+  useEffect(() => {
+    const root = containerRef.current;
+    if (!root || !mediaDragActive) return;
+
+    let highlighted: HTMLElement | null = null;
+    const clear = () => {
+      if (highlighted) {
+        highlighted.style.outline = "";
+        highlighted.style.outlineOffset = "";
+        highlighted = null;
+      }
+    };
+    const imageFieldAt = (target: EventTarget | null) => {
+      const el = (target as HTMLElement | null)?.closest?.<HTMLElement>("[data-ek-field]") ?? null;
+      if (!el) return null;
+      const wrapper = el.closest<HTMLElement>("[data-editkraft-block-id]");
+      const blockId = wrapper?.getAttribute("data-editkraft-block-id") ?? null;
+      const fieldKey = el.getAttribute("data-ek-field") ?? null;
+      if (!blockId || !fieldKey) return null;
+      const type = blockTypeOf(blockId);
+      if (!type || fieldKindOf(type, fieldKey) !== "image") return null;
+      return { el, blockId, fieldKey };
+    };
+
+    const onDragOver = (e: DragEvent) => {
+      const hit = imageFieldAt(e.target);
+      if (hit) {
+        e.preventDefault(); // ohne preventDefault ist das Feld kein gültiges Drop-Ziel
+        if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+        if (highlighted !== hit.el) {
+          clear();
+          highlighted = hit.el;
+          highlighted.style.outline = "2px solid #f5a623";
+          highlighted.style.outlineOffset = "2px";
+        }
+      } else {
+        clear();
+      }
+    };
+    const onDrop = (e: DragEvent) => {
+      const hit = imageFieldAt(e.target);
+      if (hit) {
+        e.preventDefault();
+        postToStudio(
+          {
+            channel: "editkraft",
+            v: 1,
+            type: "ek:media-drop",
+            blockId: hit.blockId,
+            fieldKey: hit.fieldKey,
+          },
+          studioOrigin,
+        );
+      }
+      clear();
+      setMediaDragActive(false);
+    };
+
+    root.addEventListener("dragover", onDragOver);
+    root.addEventListener("drop", onDrop);
+    return () => {
+      root.removeEventListener("dragover", onDragOver);
+      root.removeEventListener("drop", onDrop);
+      clear();
+    };
+    // blockTypeOf/fieldKindOf lesen stabile Struktur/Registry; während eines Drags
+    // ändert sich der Blocktyp eines Feldes nicht.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mediaDragActive, studioOrigin]);
 
   // Selektions-/Fokusänderung → Toolbar neu positionieren + Aktiv-Status lesen.
   // Immer über refreshRef, damit die aktuelle Closure (tree) genutzt wird.
