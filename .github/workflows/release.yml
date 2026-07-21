@@ -9,7 +9,6 @@ concurrency: ${{ github.workflow }}-${{ github.ref }}
 permissions:
   contents: write
   pull-requests: write
-  id-token: write # npm provenance
 
 jobs:
   release:
@@ -26,7 +25,7 @@ jobs:
       - run: pnpm build
 
       # Erzeugt/aktualisiert den Version-PR oder published, wenn ein Version-PR gemergt wurde.
-      # publish nutzt `pnpm release` (turbo build + changeset publish, provenance via id-token).
+      # publish nutzt `pnpm release` (turbo build + changeset publish).
       - name: Create Release PR or publish
         uses: changesets/action@v1
         with:
@@ -40,4 +39,3 @@ jobs:
           # setup-node erzeugt eine .npmrc mit _authToken=${NODE_AUTH_TOKEN};
           # ohne diese Zeile publiziert npm unauthentifiziert → 404.
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NPM_CONFIG_PROVENANCE: "true"
