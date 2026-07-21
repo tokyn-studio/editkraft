@@ -3,6 +3,13 @@ import { defineConfig } from "tsup";
 
 const external = ["react", "react-dom", "next", "@supabase/supabase-js", "@editkraft/schema"];
 
+// Eigene Paketversion zur Build-Zeit einspeisen — die Preview meldet sie ans
+// Studio (ek:runtime-info), damit das Studio auf eine veraltete Runtime hinweisen
+// kann. `define` ersetzt das Token im Bundle durch das String-Literal.
+const RUNTIME_VERSION = (JSON.parse(readFileSync("package.json", "utf8")) as { version: string })
+  .version;
+const define = { __EK_RUNTIME_VERSION__: JSON.stringify(RUNTIME_VERSION) };
+
 /** Stellt sicher, dass die Client-Bundles mit "use client" beginnen. */
 function ensureUseClient() {
   for (const file of ["dist/preview.js", "dist/preview.cjs"]) {
@@ -34,6 +41,7 @@ export default defineConfig([
     sourcemap: true,
     treeshake: true,
     external,
+    define,
     onSuccess: async () => ensureUseClient(),
   },
 ]);
