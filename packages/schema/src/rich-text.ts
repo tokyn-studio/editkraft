@@ -15,17 +15,37 @@ export const RICH_TEXT_ALLOWLIST = {
   u: [],
   s: [],
   a: ["href", "target"],
-  p: [],
-  h2: [],
-  h3: [],
+  p: ["style"],
+  h2: ["style"],
+  h3: ["style"],
   ul: [],
   ol: [],
-  li: [],
-  blockquote: [],
+  li: ["style"],
+  blockquote: ["style"],
   code: [],
   br: [],
   hr: [],
 } as const;
+
+/** Block-Tags, auf denen eine Textausrichtung erlaubt ist. */
+const ALIGNABLE = new Set(["p", "h2", "h3", "li", "blockquote"]);
+const ALIGN_VALUES = new Set(["left", "center", "right", "justify"]);
+
+/**
+ * Liest eine erlaubte Textausrichtung aus `style="text-align:…"` (styleWithCSS)
+ * oder dem `align`-Attribut (Fallback älterer execCommand-Engines). Nur die vier
+ * bekannten Werte überleben; der Wert wird NIE roh durchgereicht.
+ */
+function extractAlign(attrs: string): string | null {
+  const style = extractAttr(attrs, "style");
+  if (style) {
+    const m = /text-align\s*:\s*([a-zA-Z]+)/.exec(style);
+    if (m && ALIGN_VALUES.has(m[1]!.toLowerCase())) return m[1]!.toLowerCase();
+  }
+  const align = extractAttr(attrs, "align");
+  if (align && ALIGN_VALUES.has(align.toLowerCase())) return align.toLowerCase();
+  return null;
+}
 
 /** Void-Tags: werden ohne Schließtag neu aufgebaut (kein open-Stack-Eintrag). */
 const VOID_TAGS = new Set(["br", "hr"]);
@@ -112,6 +132,16 @@ export function sanitizeRichText(input: string): string {
         open.push("a");
       }
       // ungültiger/fehlender href: Link-Wrapper droppen, Text bleibt
+      continue;
+    }
+
+    if (ALIGNABLE.has(name)) {
+      // Nur die Textausrichtung überlebt – als frisch gebautes, validiertes
+      // `style="text-align:…"`. „left" ist Default und wird weggelassen.
+      const align = extractAlign(m[2]!);
+      const styleAttr = align && align !== "left" ? ` style="text-align:${align}"` : "";
+      out += `<${name}${styleAttr}>`;
+      open.push(name);
       continue;
     }
 

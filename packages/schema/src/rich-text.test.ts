@@ -94,4 +94,41 @@ describe("sanitizeRichText", () => {
     const once = sanitizeRichText(dirty);
     expect(sanitizeRichText(once)).toBe(once);
   });
+
+  it("behaelt text-align auf Block-Tags (center/right/justify)", () => {
+    expect(sanitizeRichText('<p style="text-align:center">a</p>')).toBe(
+      '<p style="text-align:center">a</p>',
+    );
+    expect(sanitizeRichText('<h2 style="text-align: right">a</h2>')).toBe(
+      '<h2 style="text-align:right">a</h2>',
+    );
+    expect(sanitizeRichText('<p style="text-align:justify">a</p>')).toBe(
+      '<p style="text-align:justify">a</p>',
+    );
+  });
+
+  it("uebernimmt align-Attribut als text-align (execCommand-Fallback)", () => {
+    expect(sanitizeRichText('<p align="center">a</p>')).toBe('<p style="text-align:center">a</p>');
+  });
+
+  it("laesst left weg (Default) und verwirft ungueltige/gefaehrliche styles", () => {
+    expect(sanitizeRichText('<p style="text-align:left">a</p>')).toBe("<p>a</p>");
+    // Nur text-align wird neu gebaut – alles andere im style faellt weg.
+    expect(sanitizeRichText('<p style="text-align:center;background:url(x)">a</p>')).toBe(
+      '<p style="text-align:center">a</p>',
+    );
+    expect(sanitizeRichText('<p style="color:red">a</p>')).toBe("<p>a</p>");
+    expect(sanitizeRichText('<p style="text-align:evil">a</p>')).toBe("<p>a</p>");
+  });
+
+  it("erlaubt text-align nicht auf Inline-/Nicht-Block-Tags", () => {
+    expect(sanitizeRichText('<strong style="text-align:center">a</strong>')).toBe(
+      "<strong>a</strong>",
+    );
+  });
+
+  it("bleibt idempotent mit Ausrichtung", () => {
+    const once = sanitizeRichText('<p style="text-align:center">a</p>');
+    expect(sanitizeRichText(once)).toBe(once);
+  });
 });

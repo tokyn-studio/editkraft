@@ -148,6 +148,7 @@ export function EditkraftPreview({
     ul: boolean;
     ol: boolean;
     block: string;
+    align: string;
   } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const focusedRef = useRef<{ blockId: string; fieldKey: string } | null>(null);
@@ -482,6 +483,13 @@ export function EditkraftPreview({
     } catch {
       block = "";
     }
+    const align = q("justifyCenter")
+      ? "center"
+      : q("justifyRight")
+        ? "right"
+        : q("justifyFull")
+          ? "justify"
+          : "left";
     const next = {
       bold: q("bold"),
       italic: q("italic"),
@@ -490,6 +498,7 @@ export function EditkraftPreview({
       ul: q("insertUnorderedList"),
       ol: q("insertOrderedList"),
       block,
+      align,
     };
     setFmt((prev) =>
       prev &&
@@ -499,7 +508,8 @@ export function EditkraftPreview({
       prev.strike === next.strike &&
       prev.ul === next.ul &&
       prev.ol === next.ol &&
-      prev.block === next.block
+      prev.block === next.block &&
+      prev.align === next.align
         ? prev
         : next,
     );
@@ -750,10 +760,16 @@ export function EditkraftPreview({
       restoreSelection();
     }
 
-    // Tag-basierte Auszeichnung erzwingen (<b>/<i>/<u>/<strike>) statt inline-styles –
-    // sonst verwirft der Sanitizer die (nicht erlaubten) <span style>-Wrapper.
+    // Ausrichtung braucht CSS (`text-align`, das der Sanitizer erlaubt); alle
+    // anderen Formate bleiben tag-basiert (<b>/<i>/…), weil der Sanitizer inline-
+    // style-Wrapper sonst verwirft.
+    const isAlign =
+      command === "justifyLeft" ||
+      command === "justifyCenter" ||
+      command === "justifyRight" ||
+      command === "justifyFull";
     try {
-      document.execCommand("styleWithCSS", false, "false");
+      document.execCommand("styleWithCSS", false, isAlign ? "true" : "false");
     } catch {
       /* ältere Engines ohne styleWithCSS: ignorieren */
     }
@@ -1372,6 +1388,32 @@ export function EditkraftPreview({
 
   const divider = (): ReactNode =>
     createElement("div", { style: { width: 1, height: 18, background: "#2E3138", margin: "0 3px" } });
+
+  // Ausrichtungs-Icon: vier horizontale Linien, je nach Variante links/mittig/rechts angeschlagen.
+  const alignIcon = (variant: "left" | "center" | "right"): ReactNode => {
+    const rows = [
+      { y: 3.5, w: 12 },
+      { y: 6.5, w: 8 },
+      { y: 9.5, w: 12 },
+      { y: 12.5, w: 7 },
+    ];
+    return createElement(
+      "svg",
+      {
+        width: 15,
+        height: 15,
+        viewBox: "0 0 16 16",
+        fill: "none",
+        stroke: "currentColor",
+        strokeWidth: 1.6,
+        strokeLinecap: "round",
+      },
+      ...rows.map((r, i) => {
+        const x1 = variant === "left" ? 2 : variant === "center" ? (16 - r.w) / 2 : 14 - r.w;
+        return createElement("line", { key: i, x1, y1: r.y, x2: x1 + r.w, y2: r.y });
+      }),
+    );
+  };
 
   const isParagraph = !fmt?.block || fmt.block === "p" || fmt.block === "div";
 
@@ -2173,6 +2215,25 @@ export function EditkraftPreview({
             title: "Quote",
             active: fmt?.block === "blockquote",
             onClick: () => applyFormat("blockquote"),
+          }),
+          divider(),
+          fmtButton({
+            label: alignIcon("left"),
+            title: "Align left",
+            active: fmt?.align === "left",
+            onClick: () => applyFormat("justifyLeft"),
+          }),
+          fmtButton({
+            label: alignIcon("center"),
+            title: "Align center",
+            active: fmt?.align === "center",
+            onClick: () => applyFormat("justifyCenter"),
+          }),
+          fmtButton({
+            label: alignIcon("right"),
+            title: "Align right",
+            active: fmt?.align === "right",
+            onClick: () => applyFormat("justifyRight"),
           }),
           divider(),
           fmtButton({ label: linkIcon, title: "Link", active: !!linkPopover, onClick: () => applyFormat("link") }),
