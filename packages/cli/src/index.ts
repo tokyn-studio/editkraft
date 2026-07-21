@@ -2,6 +2,7 @@ import pc from "picocolors";
 import { init } from "./commands/init";
 import { doctor } from "./commands/doctor";
 import { scan } from "./commands/scan";
+import { update } from "./commands/update";
 
 const HELP = `${pc.bold("editkraft")} – visual CMS for Next.js + Supabase
 
@@ -10,12 +11,14 @@ ${pc.bold("Usage:")}
 
 ${pc.bold("Commands:")}
   init      Sets up Editkraft in the current project (migration, config, registry, routes)
+  update    Bumps @editkraft/react + @editkraft/schema to the latest version and installs
   doctor    Checks migration state, ENV, and registry consistency
   scan      Read-only scan for collection candidates (frontmatter dirs, object arrays)
 
 ${pc.bold("Options:")}
   --yes, -y     Non-interactive (accepts defaults)
   --force       Overwrite existing files
+  --dry-run     Show what would change without writing (update)
   --json        Machine-readable output (scan)
   --cwd <dir>   Target directory (default: current)
   --help, -h    Show this help
@@ -33,6 +36,7 @@ function parseArgs(argv: string[]) {
     command,
     yes: has("--yes", "-y"),
     force: has("--force"),
+    dryRun: has("--dry-run"),
     json: has("--json"),
     help: has("--help", "-h"),
     cwd: value("--cwd") ?? process.cwd(),
@@ -50,6 +54,8 @@ export async function run(argv: string[]): Promise<number> {
   switch (args.command) {
     case "init":
       return init({ cwd: args.cwd, yes: args.yes, force: args.force });
+    case "update":
+      return update({ cwd: args.cwd, yes: args.yes, dryRun: args.dryRun });
     case "doctor":
       return doctor({ cwd: args.cwd });
     case "scan":

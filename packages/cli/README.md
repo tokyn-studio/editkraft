@@ -6,6 +6,7 @@ The Editkraft CLI: `init`, `doctor`, and `scan` for Next.js projects with Supaba
 
 ```bash
 npx editkraft init      # sets up Editkraft in the current project
+npx editkraft update    # bumps @editkraft/react + @editkraft/schema to latest and installs
 npx editkraft doctor    # checks migration state, ENV, and registry consistency
 npx editkraft scan      # read-only scan for collection candidates (--json for machines)
 ```
