@@ -202,10 +202,9 @@ export function EditkraftPreview({
     errorMsg?: string | undefined;
   } | null>(null);
 
-  // Aktiv, während aus der Studio-Medienbibliothek ein Bild über den Canvas
-  // gezogen wird (per ek:media-drag-start/-end signalisiert). Steuert das
-  // Hervorheben der Bild-Felder als Drop-Ziele.
-  const [mediaDragActive, setMediaDragActive] = useState(false);
+  // Hervorgehobenes Bild-Feld während eines Studio-Medien-Drags (Ref, weil das
+  // Hervorheben über eingehende Nachrichten läuft, nicht über Render-State).
+  const mediaHighlightRef = useRef<HTMLElement | null>(null);
 
   // Zuschneiden-Modus (non-destruktives 1:1-Framing: Pan per Ziehen, Zoom per Slider/Scroll).
   const [cropMode, setCropMode] = useState<{
@@ -262,6 +261,32 @@ export function EditkraftPreview({
     return find(tree.blocks);
   };
 
+  const clearMediaHighlight = () => {
+    const el = mediaHighlightRef.current;
+    if (el) {
+      el.style.outline = "";
+      el.style.outlineOffset = "";
+      mediaHighlightRef.current = null;
+    }
+  };
+
+  // Bild-Feld an einer Viewport-Koordinate (aus dem Studio-Drag). Statt nativer
+  // Drag-Events (die eine cross-origin-iframe-Grenze nicht zuverlässig überqueren)
+  // schickt das Studio Cursor-Koordinaten; hier wird per elementFromPoint getroffen.
+  const imageFieldAtPoint = (x: number, y: number) => {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    const el = document.elementFromPoint(x, y) as HTMLElement | null;
+    const field = el?.closest?.<HTMLElement>("[data-ek-field]") ?? null;
+    if (!field) return null;
+    const wrapper = field.closest<HTMLElement>("[data-editkraft-block-id]");
+    const blockId = wrapper?.getAttribute("data-editkraft-block-id") ?? null;
+    const fieldKey = field.getAttribute("data-ek-field") ?? null;
+    if (!blockId || !fieldKey) return null;
+    const type = blockTypeOf(blockId);
+    if (!type || fieldKindOf(type, fieldKey) !== "image") return null;
+    return { field, blockId, fieldKey };
+  };
+
   useEffect(() => {
     postToStudio(createMessage("ek:ready", { schemaVersion: content.schemaVersion }), studioOrigin);
     postToStudio(createMessage("ek:schema", { blocks: registry.descriptors() }), studioOrigin);
@@ -278,16 +303,43 @@ export function EditkraftPreview({
 
     const onMessage = (event: MessageEvent) => {
       if (!isAllowedOrigin(event.origin, studioOrigin)) return;
-      // Roh-Nachrichten (kein Schema-Typ): Drag&Drop eines Bildes aus der
-      // Studio-Medienbibliothek über den Canvas. Nur ein Flag – der eigentliche
-      // Austausch läuft beim Drop über ek:media-drop zurück ans Studio.
-      const raw = event.data as { channel?: string; type?: string } | null;
+      // Roh-Nachrichten (kein Schema-Typ): Drag&Drop eines Bildes aus der Studio-
+      // Medienbibliothek über den Canvas. Das Studio managt den Pointer-Drag (mit
+      // Overlay) und schickt Cursor-Koordinaten; hier wird per elementFromPoint das
+      // getroffene Bild-Feld ermittelt, hervorgehoben und beim Ablegen via
+      // ek:media-drop (blockId/fieldKey) zurückgemeldet. So unabhängig davon, dass
+      // native Drag-Events die cross-origin-iframe-Grenze nicht überqueren.
+      const raw = event.data as { channel?: string; type?: string; x?: number; y?: number } | null;
       if (raw && raw.channel === "editkraft" && raw.type === "ek:media-drag-start") {
-        setMediaDragActive(true);
-        return;
+        return; // Beginn – nichts zu tun; Highlight kommt mit ek:media-drag-move
       }
       if (raw && raw.channel === "editkraft" && raw.type === "ek:media-drag-end") {
-        setMediaDragActive(false);
+        clearMediaHighlight();
+        return;
+      }
+      if (raw && raw.channel === "editkraft" && raw.type === "ek:media-drag-move") {
+        const hit = imageFieldAtPoint(Number(raw.x), Number(raw.y));
+        if (hit) {
+          if (mediaHighlightRef.current !== hit.field) {
+            clearMediaHighlight();
+            mediaHighlightRef.current = hit.field;
+            hit.field.style.outline = "2px solid #f5a623";
+            hit.field.style.outlineOffset = "2px";
+          }
+        } else {
+          clearMediaHighlight();
+        }
+        return;
+      }
+      if (raw && raw.channel === "editkraft" && raw.type === "ek:media-drop-at") {
+        const hit = imageFieldAtPoint(Number(raw.x), Number(raw.y));
+        if (hit) {
+          postToStudio(
+            { channel: "editkraft", v: 1, type: "ek:media-drop", blockId: hit.blockId, fieldKey: hit.fieldKey },
+            studioOrigin,
+          );
+        }
+        clearMediaHighlight();
         return;
       }
       const message = parseMessage(event.data);
@@ -364,80 +416,6 @@ export function EditkraftPreview({
       }
     }
   });
-
-  // Drag&Drop aus der Studio-Medienbibliothek: solange ein Bild über den Canvas
-  // gezogen wird, Bild-Felder als Drop-Ziele hervorheben und beim Ablegen
-  // ek:media-drop (blockId/fieldKey) ans Studio melden. Der eigentliche Austausch
-  // passiert dort (applyImageAsset → ek:update) mit dem gezogenen Asset.
-  useEffect(() => {
-    const root = containerRef.current;
-    if (!root || !mediaDragActive) return;
-
-    let highlighted: HTMLElement | null = null;
-    const clear = () => {
-      if (highlighted) {
-        highlighted.style.outline = "";
-        highlighted.style.outlineOffset = "";
-        highlighted = null;
-      }
-    };
-    const imageFieldAt = (target: EventTarget | null) => {
-      const el = (target as HTMLElement | null)?.closest?.<HTMLElement>("[data-ek-field]") ?? null;
-      if (!el) return null;
-      const wrapper = el.closest<HTMLElement>("[data-editkraft-block-id]");
-      const blockId = wrapper?.getAttribute("data-editkraft-block-id") ?? null;
-      const fieldKey = el.getAttribute("data-ek-field") ?? null;
-      if (!blockId || !fieldKey) return null;
-      const type = blockTypeOf(blockId);
-      if (!type || fieldKindOf(type, fieldKey) !== "image") return null;
-      return { el, blockId, fieldKey };
-    };
-
-    const onDragOver = (e: DragEvent) => {
-      const hit = imageFieldAt(e.target);
-      if (hit) {
-        e.preventDefault(); // ohne preventDefault ist das Feld kein gültiges Drop-Ziel
-        if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
-        if (highlighted !== hit.el) {
-          clear();
-          highlighted = hit.el;
-          highlighted.style.outline = "2px solid #f5a623";
-          highlighted.style.outlineOffset = "2px";
-        }
-      } else {
-        clear();
-      }
-    };
-    const onDrop = (e: DragEvent) => {
-      const hit = imageFieldAt(e.target);
-      if (hit) {
-        e.preventDefault();
-        postToStudio(
-          {
-            channel: "editkraft",
-            v: 1,
-            type: "ek:media-drop",
-            blockId: hit.blockId,
-            fieldKey: hit.fieldKey,
-          },
-          studioOrigin,
-        );
-      }
-      clear();
-      setMediaDragActive(false);
-    };
-
-    root.addEventListener("dragover", onDragOver);
-    root.addEventListener("drop", onDrop);
-    return () => {
-      root.removeEventListener("dragover", onDragOver);
-      root.removeEventListener("drop", onDrop);
-      clear();
-    };
-    // blockTypeOf/fieldKindOf lesen stabile Struktur/Registry; während eines Drags
-    // ändert sich der Blocktyp eines Feldes nicht.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mediaDragActive, studioOrigin]);
 
   // Selektions-/Fokusänderung → Toolbar neu positionieren + Aktiv-Status lesen.
   // Immer über refreshRef, damit die aktuelle Closure (tree) genutzt wird.
