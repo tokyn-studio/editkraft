@@ -126,6 +126,9 @@ function PreviewBlocks({
  * Das ist die minimal-invasive Variante: null Sonderfälle in dieser Datei,
  * das Studio sieht eine „Seite mit einem Block".
  */
+// Wird von tsup (define) zur Build-Zeit durch die Paketversion ersetzt.
+declare const __EK_RUNTIME_VERSION__: string | undefined;
+
 export function EditkraftPreview({
   content,
   registry,
@@ -290,6 +293,17 @@ export function EditkraftPreview({
 
   useEffect(() => {
     postToStudio(createMessage("ek:ready", { schemaVersion: content.schemaVersion }), studioOrigin);
+    // Eigene Runtime-Version melden (Roh-Nachricht), damit das Studio auf ein
+    // veraltetes @editkraft/react hinweisen kann.
+    postToStudio(
+      {
+        channel: "editkraft",
+        v: 1,
+        type: "ek:runtime-info",
+        version: typeof __EK_RUNTIME_VERSION__ !== "undefined" ? __EK_RUNTIME_VERSION__ : "0.0.0",
+      },
+      studioOrigin,
+    );
     postToStudio(createMessage("ek:schema", { blocks: registry.descriptors() }), studioOrigin);
     postToStudio(createMessage("ek:tree", { content }), studioOrigin);
     if (globals) {
